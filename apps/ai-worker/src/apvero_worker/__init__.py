@@ -1,0 +1,1 @@
+"""Apvero stateless AI worker."""

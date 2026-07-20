@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apvero.dev/events/run-completed.v1",
+  "title": "Run Completed Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "occurredAt", "tenantId", "workspaceId", "applicationId", "releaseId", "runId", "traceId", "status", "usage"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "tenantId": { "type": "string", "format": "uuid" },
+    "workspaceId": { "type": "string", "format": "uuid" },
+    "applicationId": { "type": "string", "format": "uuid" },
+    "releaseId": { "type": "string", "format": "uuid" },
+    "runId": { "type": "string", "format": "uuid" },
+    "traceId": { "type": "string", "minLength": 16 },
+    "status": { "enum": ["SUCCEEDED", "FAILED"] },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promptTokens", "completionTokens", "costMicros", "latencyMs"],
+      "properties": {
+        "promptTokens": { "type": "integer", "minimum": 0 },
+        "completionTokens": { "type": "integer", "minimum": 0 },
+        "costMicros": { "type": "integer", "minimum": 0 },
+        "latencyMs": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

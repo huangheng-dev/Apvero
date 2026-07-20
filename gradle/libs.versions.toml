@@ -1,0 +1,29 @@
+[versions]
+spring-boot = "4.1.0"
+spring-ai = "2.0.0"
+spring-modulith = "2.1.0"
+archunit = "1.4.1"
+
+[libraries]
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+spring-boot-security = { module = "org.springframework.boot:spring-boot-starter-security" }
+spring-boot-jooq = { module = "org.springframework.boot:spring-boot-starter-jooq" }
+spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+spring-boot-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+spring-ai-bom = { module = "org.springframework.ai:spring-ai-bom", version.ref = "spring-ai" }
+spring-ai-model = { module = "org.springframework.ai:spring-ai-model" }
+spring-ai-openai = { module = "org.springframework.ai:spring-ai-openai" }
+spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
+spring-modulith-api = { module = "org.springframework.modulith:spring-modulith-api" }
+spring-modulith-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
+spring-modulith-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
+flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql = { module = "org.postgresql:postgresql" }
+archunit = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

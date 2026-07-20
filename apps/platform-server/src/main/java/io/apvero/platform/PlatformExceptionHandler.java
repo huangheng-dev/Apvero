@@ -1,0 +1,63 @@
+package io.apvero.platform;
+
+import io.apvero.platform.application.ApplicationNotFoundException;
+import io.apvero.platform.release.ReleaseNotFoundException;
+import java.net.URI;
+import java.time.Instant;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.validation.FieldError;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+class PlatformExceptionHandler {
+
+    @ExceptionHandler(ApplicationNotFoundException.class)
+    ProblemDetail applicationNotFound(ApplicationNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, "APVERO_APPLICATION_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(ReleaseNotFoundException.class)
+    ProblemDetail releaseNotFound(ReleaseNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, "APVERO_RELEASE_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail invalidRequest(IllegalArgumentException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "APVERO_INVALID_REQUEST", exception.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail integrityViolation(DataIntegrityViolationException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "APVERO_REFERENCE_SCOPE_INVALID",
+                "A referenced resource does not exist in the active workspace or violates an immutable constraint.");
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    ProblemDetail validation(MethodArgumentNotValidException exception) {
+        ProblemDetail detail = problem(
+                HttpStatus.BAD_REQUEST,
+                "APVERO_VALIDATION_FAILED",
+                "The request does not satisfy the public contract.");
+        Map<String, String> fields = exception.getBindingResult().getFieldErrors().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        FieldError::getField,
+                        error -> error.getDefaultMessage() == null ? "invalid" : error.getDefaultMessage(),
+                        (left, right) -> left));
+        detail.setProperty("fields", fields);
+        return detail;
+    }
+
+    private ProblemDetail problem(HttpStatus status, String code, String detailMessage) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(status, detailMessage);
+        detail.setType(URI.create("urn:apvero:problem:" + code.toLowerCase()));
+        detail.setTitle(code);
+        detail.setProperty("code", code);
+        detail.setProperty("timestamp", Instant.now());
+        return detail;
+    }
+}

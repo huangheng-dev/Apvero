@@ -1,0 +1,59 @@
+schemaVersion: 1
+basePackage: io.apvero.platform
+
+modules:
+  - id: identity
+    status: baseline
+    owns: [tenant, workspace, principal, api-key, role, policy-binding]
+    publicApi: io.apvero.platform.identity
+    databaseTables: [tenant, workspace, api_credential]
+
+  - id: application
+    status: baseline
+    implementedOwns: [ai-application, runtime-mode, lifecycle-metadata]
+    plannedOwns: [versioned-application-draft, input-contract, output-contract]
+    publicApi: io.apvero.platform.application
+    databaseTables: [ai_application]
+
+  - id: capability-registry
+    status: baseline
+    implementedOwns: [model-provider, model, model-route, prompt, prompt-version]
+    plannedOwns: [tool, mcp-server, knowledge-source, memory-provider, evaluator, guardrail]
+    publicApi: io.apvero.platform.capability
+    databaseTables: [model_provider, model_definition, model_route, prompt_asset, prompt_version]
+
+  - id: release
+    status: baseline
+    implementedOwns: [immutable-release-bundle, canonical-artifact-digest]
+    plannedOwns: [release-gate, environment-promotion]
+    publicApi: io.apvero.platform.release
+    databaseTables: [release_bundle]
+
+  - id: runtime
+    status: baseline
+    implementedOwns: [run-ledger, trace-identity, token-usage, cost, runtime-provider-port]
+    plannedOwns: [normalized-trace-spans, streaming, provider-routing]
+    publicApi: io.apvero.platform.runtime
+    databaseTables: [ai_run]
+
+  - id: knowledge
+    status: planned
+    owns: [document, ingestion-job, chunk, knowledge-index, retrieval-policy]
+    publicApi: io.apvero.platform.knowledge
+
+  - id: evaluation
+    status: planned
+    owns: [dataset, case, evaluator, evaluation-run, experiment, release-gate-result]
+    publicApi: io.apvero.platform.evaluation
+
+  - id: governance
+    status: baseline
+    implementedOwns: [secret-reference]
+    plannedOwns: [budget, audit-event, retention-policy]
+    publicApi: io.apvero.platform.governance
+    databaseTables: [secret_reference]
+
+  - id: extension
+    status: planned
+    owns: [plugin-manifest, compatibility, permission, signature, isolated-runner]
+    publicApi: io.apvero.platform.extension

@@ -1,0 +1,59 @@
+schemaVersion: 1
+project: apvero
+lastReviewed: 2026-07-20
+
+invariants:
+  - id: APP_ROOT
+    statement: AI Application is the root product entity; Agent is a runtime mode.
+    enforcement:
+      - architecture-tests
+      - api-review
+
+  - id: IMMUTABLE_RELEASE
+    statement: Production references an immutable ReleaseBundle that pins every dependency version and artifact digest.
+    enforcement:
+      - database-constraints
+      - release-service-tests
+
+  - id: REPRODUCIBLE_RUN
+    statement: Every run records tenant, workspace, application, release, input, output, policy decisions, trace identity, usage, cost, and timestamps.
+    enforcement:
+      - database-constraints
+      - runtime-contract-tests
+
+  - id: PROVIDER_NEUTRAL_CORE
+    statement: Provider names, SDK types, and provider-specific options do not enter core domain APIs.
+    enforcement:
+      - forbidden-import-tests
+      - contract-review
+
+  - id: TRACE_TO_IMPROVEMENT
+    statement: Feedback and production traces can be curated into versioned datasets and evaluated before release.
+    enforcement:
+      - lifecycle-e2e-tests
+
+  - id: TENANT_ISOLATION
+    statement: Tenant scope is mandatory in persistence, authorization, caching, vector search, object storage, events, metrics, and logs.
+    enforcement:
+      - authorization-tests
+      - repository-tests
+
+  - id: DENY_BY_DEFAULT
+    statement: Capability, tool, MCP, secret, and administrative access is denied unless explicitly granted.
+    enforcement:
+      - security-tests
+
+  - id: BILINGUAL_REQUIRED
+    statement: English and Simplified Chinese ship together for every user-facing feature and core document.
+    enforcement:
+      - i18n-check
+
+  - id: SELF_HOSTED_POSTGRES_ONLY
+    statement: The default self-hosted deployment remains functional with PostgreSQL and pgvector as the only mandatory stateful dependency.
+    enforcement:
+      - compose-self-hosted-test
+
+  - id: SINGLE_AI_ABSTRACTION
+    statement: Spring AI is the only core Java AI abstraction; alternatives remain isolated adapters.
+    enforcement:
+      - dependency-tests

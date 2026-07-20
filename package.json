@@ -1,0 +1,13 @@
+{
+  "name": "apvero",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "pnpm --filter @apvero/console dev",
+    "build": "pnpm --filter @apvero/console build",
+    "test": "pnpm --filter @apvero/console test",
+    "typecheck": "pnpm --filter @apvero/console typecheck",
+    "i18n:check": "pnpm --filter @apvero/console i18n:check"
+  }
+}

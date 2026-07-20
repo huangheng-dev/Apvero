@@ -1,0 +1,135 @@
+schemaVersion: 2
+product: Apvero
+sourceLocale: en
+requiredLocales: [en, zh-CN]
+
+roles: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR, MEMBER]
+
+naming:
+  canonicalLocale: en
+  rules:
+    - Use short, internationally recognized product nouns.
+    - Prefer plural resource names such as Applications, Models, Prompts and Evaluations.
+    - Avoid unnecessary Hub, Center and Management suffixes.
+    - Preserve standard terms including AI Gateway, MCP, Guardrails, API Keys and Traces.
+    - Backend tenant terminology is rendered as Organization in user-facing navigation.
+
+shell:
+  top: [organization-selector, workspace-selector, environment-selector, global-search]
+  bottom: [documentation, locale-switcher, theme, current-user]
+
+navigation:
+  - id: overview
+    page: overview
+    visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR, MEMBER]
+
+  - id: build
+    pages:
+      - id: applications
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, MEMBER]
+      - id: models
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER]
+      - id: prompts
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER]
+      - id: knowledge
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER]
+      - id: capabilities
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER]
+      - id: evaluations
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, MEMBER]
+      - id: playground
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, MEMBER]
+
+  - id: operate
+    pages:
+      - id: releases
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR]
+      - id: gateway
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, OPERATOR]
+      - id: runs
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR, MEMBER]
+      - id: integrations
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR]
+
+  - id: govern
+    pages:
+      - id: usage
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER, OPERATOR]
+      - id: guardrails
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, OPERATOR]
+      - id: audit
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, OPERATOR]
+
+  - id: organization
+    pages:
+      - id: workspaces
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN]
+      - id: accessControl
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN]
+      - id: apiKeys
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN, DEVELOPER]
+      - id: secrets
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN]
+
+  - id: system
+    pages:
+      - id: organizations
+        visibleTo: [SYSTEM_ADMIN]
+        condition: multiTenantAdministration
+      - id: extensions
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, AI_ADMIN]
+      - id: health
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN, OPERATOR]
+      - id: settings
+        visibleTo: [SYSTEM_ADMIN, TENANT_ADMIN]
+
+secondaryViews:
+  applications:
+    - {id: agents, status: preview, route: "applications?mode=AGENTIC"}
+    - {id: workflows, status: deferred, route: "applications?mode=WORKFLOW"}
+  capabilities:
+    - {id: tools, status: preview, tab: tools}
+    - {id: mcp, status: preview, tab: mcp-servers}
+    - {id: memory, status: deferred, tab: memory-providers}
+  evaluations:
+    - {id: datasets, status: preview, tab: datasets}
+    - {id: experiments, status: preview, tab: experiments}
+    - {id: abTests, status: deferred, tab: ab-tests}
+    - {id: feedback, status: preview, tab: feedback}
+    - {id: releaseGates, status: preview, tab: release-gates}
+  usage:
+    - {id: budgets, status: preview, tab: budgets}
+    - {id: forecast, status: preview, tab: forecast}
+    - {id: cacheSavings, status: deferred, tab: cache-savings}
+  accessControl:
+    - {id: members, status: preview, tab: members}
+    - {id: invitations, status: preview, tab: invitations}
+    - {id: roles, status: preview, tab: roles}
+    - {id: policies, status: preview, tab: policies}
+    - {id: identityProviders, status: deferred, tab: identity-providers}
+  extensions:
+    - {id: marketplace, status: preview, tab: marketplace}
+    - {id: installedExtensions, status: preview, tab: installed}
+
+legacyRoutes:
+  agents: applications
+  workflows: applications
+  tools: capabilities
+  mcp: capabilities
+  memory: capabilities
+  feedback: evaluations
+  budgets: usage
+  members: accessControl
+  roles: accessControl
+  marketplace: extensions
+
+rules:
+  - AI Application remains the root entity; Agents and Workflows are runtime-mode views.
+  - Secondary views preserve approved capability scope without becoming peer-level navigation.
+  - Navigation visibility is derived from authorization; hidden UI is not authorization enforcement.
+  - English labels are canonical and Simplified Chinese coverage is mandatory.
+  - Cache belongs to AI Gateway; Webhooks belong to Integrations.
+  - Feedback closes the Evaluations loop; Budgets belongs to Usage and Costs.
+  - Administrative events belong to Audit Logs; AI execution belongs to Runs and Traces.
+  - API Keys and Secrets retain separate contracts and permissions.
+  - Architecture documentation remains a footer destination.

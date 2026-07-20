@@ -1,0 +1,36 @@
+schemaVersion: 1
+lastReviewed: 2026-07-20
+
+backend:
+  java: "25"
+  springBoot: "4.1.x"
+  springAi: "2.0.x"
+  springModulith: "2.1.x"
+  build: "Gradle 9.x Kotlin DSL"
+  persistence: "jOOQ + Flyway"
+  telemetry: "Micrometer via Actuator (baseline); OpenTelemetry (planned)"
+
+console:
+  node: "24.x"
+  react: "19.2.x"
+  typescript: "strict"
+  vite: "8.x"
+  serverState: "TanStack Query"
+  i18n: "i18next + react-i18next"
+
+worker:
+  python: "3.14.x"
+  api: "FastAPI + Pydantic"
+  environment: "uv"
+
+data:
+  postgresql: "18.x"
+  vector: "pgvector"
+  optional: [Redis, MinIO, Kafka, ClickHouse]
+
+decisions:
+  coreAiAbstraction: Spring AI
+  optionalCompatibilityAdapters: [LangChain4j, Spring AI Alibaba]
+  deploymentShape: modular-monolith-first
+  sourceLocale: en
+  requiredLocales: [en, zh-CN]

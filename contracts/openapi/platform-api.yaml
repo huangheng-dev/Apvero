@@ -1,0 +1,728 @@
+openapi: 3.1.0
+info:
+  title: Apvero Platform API
+  version: 0.1.0
+  description: Application-first control and runtime API for the Apvero self-hosted vertical slice.
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Platform
+    description: Platform identity, edition, locale, and capability discovery.
+  - name: Applications
+    description: Workspace-scoped AI application lifecycle operations.
+  - name: Releases
+    description: Immutable, content-addressed application release bundles.
+  - name: Runs
+    description: Runtime execution and workspace-scoped run ledger operations.
+  - name: Models
+    description: Provider-neutral model providers, definitions, and immutable route versions.
+  - name: Prompts
+    description: Prompt assets and immutable Prompt versions.
+  - name: Secrets
+    description: Metadata-only references to externally injected secrets.
+  - name: Access
+    description: Once-visible API credentials and access lifecycle.
+paths:
+  /api/v1/platform:
+    get:
+      security: []
+      tags: [Platform]
+      summary: Get platform information
+      operationId: getPlatformInfo
+      responses:
+        "200":
+          description: Platform identity and capabilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, version, status, sourceLocale, supportedLocales, capabilities, serverTime]
+                properties:
+                  name: { type: string }
+                  version: { type: string }
+                  status: { type: string }
+                  sourceLocale: { type: string }
+                  supportedLocales: { type: array, items: { type: string } }
+                  capabilities: { type: object, additionalProperties: { type: boolean } }
+                  serverTime: { type: string, format: date-time }
+  /api/v1/applications:
+    get:
+      tags: [Applications]
+      summary: List AI applications
+      operationId: listApplications
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace-scoped applications.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AiApplication" } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Applications]
+      summary: Create an AI application
+      operationId: createApplication
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateApplicationRequest" }
+      responses:
+        "201":
+          description: Application created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiApplication" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/applications/{applicationId}/releases:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ApplicationId"
+    get:
+      tags: [Releases]
+      summary: List application releases
+      operationId: listReleases
+      responses:
+        "200":
+          description: Immutable release bundles for one application.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ReleaseBundle" } }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Releases]
+      summary: Create an immutable release
+      operationId: createRelease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+                manifest: { $ref: "../schemas/release-bundle-manifest.schema.json" }
+      responses:
+        "201":
+          description: Content-addressed release created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReleaseBundle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/applications/{applicationId}/runs:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ApplicationId"
+    post:
+      tags: [Runs]
+      summary: Execute a released application
+      operationId: executeRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [releaseId, input]
+              properties:
+                releaseId: { type: string, format: uuid }
+                input: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Completed deterministic local run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunRecord" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/runs:
+    get:
+      tags: [Runs]
+      summary: List runtime executions
+      operationId: listRuns
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Latest 200 workspace-scoped runs.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/RunRecord" } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/applications/{applicationId}/draft:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ApplicationId"
+    patch:
+      tags: [Applications]
+      summary: Bind a model route and Prompt version to the application draft
+      operationId: bindApplicationDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [modelRouteId, promptVersionId]
+              properties:
+                modelRouteId: { type: string, format: uuid }
+                promptVersionId: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated application draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiApplication" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/applications/{applicationId}/preview-runs:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ApplicationId"
+    post:
+      tags: [Runs]
+      summary: Execute an immutable preview bundle from the current application draft
+      operationId: executePreviewRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [input]
+              properties:
+                input: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Persisted preview run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunRecord" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/usage:
+    get:
+      tags: [Runs]
+      summary: Get normalized workspace usage and cost totals
+      operationId: getUsage
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Server-confirmed usage aggregation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageSummary" }
+  /api/v1/secrets:
+    get:
+      tags: [Secrets]
+      summary: List Secret References without values
+      operationId: listSecretReferences
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Secret Reference metadata.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SecretReference" } }
+    post:
+      tags: [Secrets]
+      summary: Create an environment Secret Reference
+      operationId: createSecretReference
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, environmentVariable]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 160 }
+                environmentVariable: { type: string, pattern: "^[A-Z][A-Z0-9_]{1,159}$" }
+      responses:
+        "201":
+          description: Secret Reference created; no secret value is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretReference" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/model-providers:
+    get:
+      tags: [Models]
+      summary: List model providers
+      operationId: listModelProviders
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace model providers.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ModelProvider" } }
+    post:
+      tags: [Models]
+      summary: Register a provider endpoint
+      operationId: createModelProvider
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateModelProviderRequest" }
+      responses:
+        "201":
+          description: Provider registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelProvider" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/models:
+    get:
+      tags: [Models]
+      summary: List model definitions
+      operationId: listModels
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace model definitions.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ModelDefinition" } }
+    post:
+      tags: [Models]
+      summary: Register a model definition
+      operationId: createModel
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateModelRequest" }
+      responses:
+        "201":
+          description: Model registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelDefinition" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/model-routes:
+    get:
+      tags: [Models]
+      summary: List immutable model route versions
+      operationId: listModelRoutes
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace route versions.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ModelRoute" } }
+    post:
+      tags: [Models]
+      summary: Publish a new immutable route version
+      operationId: createModelRoute
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateModelRouteRequest" }
+      responses:
+        "201":
+          description: Route version published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelRoute" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/prompts:
+    get:
+      tags: [Prompts]
+      summary: List Prompt assets
+      operationId: listPrompts
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace Prompt assets.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PromptAsset" } }
+    post:
+      tags: [Prompts]
+      summary: Create a Prompt asset
+      operationId: createPrompt
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePromptRequest" }
+      responses:
+        "201":
+          description: Prompt asset created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromptAsset" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/prompts/{promptId}/versions:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - name: promptId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Prompts]
+      summary: List immutable Prompt versions
+      operationId: listPromptVersions
+      responses:
+        "200":
+          description: Prompt versions.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PromptVersion" } }
+    post:
+      tags: [Prompts]
+      summary: Publish an immutable Prompt version
+      operationId: createPromptVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePromptVersionRequest" }
+      responses:
+        "201":
+          description: Prompt version published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromptVersion" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/api-keys:
+    get:
+      tags: [Access]
+      summary: List API key metadata
+      operationId: listApiKeys
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: API key metadata without plaintext.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ApiCredential" } }
+    post:
+      tags: [Access]
+      summary: Issue a once-visible API key
+      operationId: issueApiKey
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, scopes]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 160 }
+                scopes: { type: array, minItems: 1, uniqueItems: true, items: { type: string, enum: [read, write, admin] } }
+                expiresAt: { type: [string, "null"], format: date-time }
+      responses:
+        "201":
+          description: API key plaintext is returned exactly once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedApiCredential" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/api-keys/{credentialId}:
+    delete:
+      tags: [Access]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: credentialId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: API key revoked. }
+        "400": { $ref: "#/components/responses/Problem" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Apvero API Key
+  parameters:
+    WorkspaceId:
+      name: X-Apvero-Workspace-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: Explicit workspace security and data scope.
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Problem:
+      description: RFC 9457 problem detail with a stable Apvero code.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    CreateApplicationRequest:
+      type: object
+      additionalProperties: false
+      required: [slug, name, runtimeMode]
+      properties:
+        slug: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000, default: "" }
+        runtimeMode: { $ref: "#/components/schemas/RuntimeMode" }
+    RuntimeMode:
+      type: string
+      enum: [CHAT, RAG, STRUCTURED, TOOL, AGENTIC, WORKFLOW]
+    AiApplication:
+      type: object
+      required: [id, tenantId, workspaceId, slug, name, description, runtimeMode, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        runtimeMode: { $ref: "#/components/schemas/RuntimeMode" }
+        status: { type: string, enum: [DRAFT, TESTING, PUBLISHED, DEPRECATED] }
+        draftModelRouteId: { type: [string, "null"], format: uuid }
+        draftPromptVersionId: { type: [string, "null"], format: uuid }
+        version: { type: integer, format: int64, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ReleaseBundle:
+      type: object
+      required: [id, tenantId, workspaceId, applicationId, version, artifactDigest, manifest, status, purpose, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        version: { type: string }
+        artifactDigest: { type: string, pattern: "^[a-f0-9]{64}$" }
+        manifest: { $ref: "../schemas/release-bundle-manifest.schema.json" }
+        status: { type: string, enum: [RELEASED, RETIRED] }
+        purpose: { type: string, enum: [PRODUCTION, PREVIEW] }
+        expiresAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    RunRecord:
+      type: object
+      required: [id, tenantId, workspaceId, applicationId, releaseBundleId, status, providerId, input, output, latencyMs, promptTokens, completionTokens, costMicros, traceId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        releaseBundleId: { type: string, format: uuid }
+        status: { type: string, enum: [SUCCEEDED, FAILED] }
+        providerId: { type: string }
+        input: { type: object, additionalProperties: true }
+        output: { type: object, additionalProperties: true }
+        latencyMs: { type: integer, format: int64, minimum: 0 }
+        promptTokens: { type: integer, minimum: 0 }
+        completionTokens: { type: integer, minimum: 0 }
+        costMicros: { type: integer, format: int64, minimum: 0 }
+        traceId: { type: string }
+        failureCategory: { type: [string, "null"] }
+        failureMessage: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+    UsageSummary:
+      type: object
+      additionalProperties: false
+      required: [runs, successfulRuns, failedRuns, promptTokens, completionTokens, totalTokens, costMicros, averageLatencyMs]
+      properties:
+        runs: { type: integer, format: int64, minimum: 0 }
+        successfulRuns: { type: integer, format: int64, minimum: 0 }
+        failedRuns: { type: integer, format: int64, minimum: 0 }
+        promptTokens: { type: integer, format: int64, minimum: 0 }
+        completionTokens: { type: integer, format: int64, minimum: 0 }
+        totalTokens: { type: integer, format: int64, minimum: 0 }
+        costMicros: { type: integer, format: int64, minimum: 0 }
+        averageLatencyMs: { type: number, minimum: 0 }
+    SecretReference:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, name, kind, locator, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [ENVIRONMENT] }
+        locator: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        rotatedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ModelProvider:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, name, providerType, baseUrl, enabled, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        providerType: { type: string, enum: [OPENAI_COMPATIBLE, DETERMINISTIC_LOCAL] }
+        baseUrl: { type: string }
+        secretReferenceId: { type: [string, "null"], format: uuid }
+        enabled: { type: boolean }
+        version: { type: integer, format: int64, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateModelProviderRequest:
+      type: object
+      additionalProperties: false
+      required: [name, providerType, baseUrl]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        providerType: { type: string, enum: [OPENAI_COMPATIBLE, DETERMINISTIC_LOCAL] }
+        baseUrl: { type: string, minLength: 1, maxLength: 500 }
+        secretReferenceId: { type: [string, "null"], format: uuid }
+    ModelDefinition:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, providerId, modelKey, name, capabilities, inputCostMicrosPerMillion, outputCostMicrosPerMillion, enabled, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        providerId: { type: string, format: uuid }
+        modelKey: { type: string }
+        name: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        inputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
+        outputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateModelRequest:
+      type: object
+      additionalProperties: false
+      required: [providerId, modelKey, name, inputCostMicrosPerMillion, outputCostMicrosPerMillion]
+      properties:
+        providerId: { type: string, format: uuid }
+        modelKey: { type: string, minLength: 1, maxLength: 200 }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        capabilities: { type: array, items: { type: string }, default: [CHAT] }
+        inputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
+        outputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
+    ModelRoute:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, name, version, modelId, status, timeoutMs, maxOutputTokens, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: integer, format: int64, minimum: 1 }
+        modelId: { type: string, format: uuid }
+        status: { type: string, enum: [PUBLISHED, DEPRECATED] }
+        timeoutMs: { type: integer, minimum: 1000, maximum: 300000 }
+        maxOutputTokens: { type: integer, minimum: 1, maximum: 200000 }
+        temperature: { type: [number, "null"], minimum: 0, maximum: 2 }
+        createdAt: { type: string, format: date-time }
+    CreateModelRouteRequest:
+      type: object
+      additionalProperties: false
+      required: [name, modelId, timeoutMs, maxOutputTokens]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        modelId: { type: string, format: uuid }
+        timeoutMs: { type: integer, minimum: 1000, maximum: 300000 }
+        maxOutputTokens: { type: integer, minimum: 1, maximum: 200000 }
+        temperature: { type: [number, "null"], minimum: 0, maximum: 2 }
+    PromptAsset:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, slug, name, description, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreatePromptRequest:
+      type: object
+      additionalProperties: false
+      required: [slug, name]
+      properties:
+        slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80 }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000, default: "" }
+    PromptVersion:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, promptAssetId, version, systemPrompt, variables, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        promptAssetId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        systemPrompt: { type: string }
+        variables: { type: array, items: { type: string } }
+        status: { type: string, enum: [PUBLISHED] }
+        createdAt: { type: string, format: date-time }
+    CreatePromptVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [systemPrompt]
+      properties:
+        systemPrompt: { type: string, minLength: 1, maxLength: 50000 }
+        variables: { type: array, items: { type: string, pattern: "^[a-zA-Z][a-zA-Z0-9_]{0,63}$" } }
+    ApiCredential:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, name, prefix, scopes, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { type: string, enum: [read, write, admin] } }
+        status: { type: string, enum: [ACTIVE, REVOKED] }
+        expiresAt: { type: [string, "null"], format: date-time }
+        lastUsedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    IssuedApiCredential:
+      type: object
+      additionalProperties: false
+      required: [credential, plaintext]
+      properties:
+        credential: { $ref: "#/components/schemas/ApiCredential" }
+        plaintext: { type: string, writeOnly: true }
+    Problem:
+      type: object
+      required: [type, title, status, detail, code, timestamp]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        timestamp: { type: string, format: date-time }
+        fields: { type: object, additionalProperties: { type: string } }

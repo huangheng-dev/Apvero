@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: apvero-platform-server
+  datasource:
+    url: ${APVERO_DB_URL:jdbc:postgresql://localhost:5432/apvero}
+    username: ${APVERO_DB_USER:apvero}
+    password: ${APVERO_DB_PASSWORD:apvero}
+    hikari:
+      maximum-pool-size: ${APVERO_DB_POOL_SIZE:10}
+      minimum-idle: 1
+  flyway:
+    enabled: true
+    validate-migration-naming: true
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${APVERO_SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+logging:
+  level:
+    io.apvero: INFO
+
+apvero:
+  security:
+    mode: ${APVERO_SECURITY_MODE:development}
+    bootstrap-token: ${APVERO_BOOTSTRAP_ADMIN_TOKEN:}
+  providers:
+    real-enabled: ${APVERO_REAL_PROVIDER_ENABLED:false}
+    allow-private-endpoints: ${APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS:false}

@@ -1,0 +1,42 @@
+schemaVersion: 1
+
+defaults:
+  denyUndeclaredDependencies: true
+  forbidCrossModuleDatabaseAccess: true
+  forbidInternalPackageImports: true
+  internalPackagePattern: "..internal.."
+
+allowed:
+  application: []
+  release:
+    - application
+    - capability-registry
+  runtime:
+    - application
+    - release
+    - capability-registry
+  identity: []
+  capability-registry:
+    - identity
+    - governance
+  knowledge:
+    - capability-registry
+  evaluation:
+    - application
+    - release
+    - runtime
+  governance:
+    - identity
+  extension:
+    - capability-registry
+
+forbiddenLibrariesInCore:
+  - dev.langchain4j
+  - com.alibaba.cloud.ai
+  - com.openai
+  - com.anthropic
+
+providerAdapterPolicy:
+  requiredLocation: adapters
+  requiresAdr: true
+  mayExposeProviderTypesToCore: false

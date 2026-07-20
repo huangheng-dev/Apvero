@@ -1,0 +1,83 @@
+name: apvero
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: ${APVERO_DB_NAME:-apvero}
+      POSTGRES_USER: ${APVERO_DB_USER:-apvero}
+      POSTGRES_PASSWORD: ${APVERO_DB_PASSWORD:-apvero}
+    volumes:
+      - apvero_postgres:/var/lib/postgresql
+    ports:
+      - "${APVERO_BIND_ADDRESS:-127.0.0.1}:${APVERO_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  platform-server:
+    build:
+      context: ../..
+      dockerfile: apps/platform-server/Dockerfile
+    environment:
+      APVERO_DB_URL: jdbc:postgresql://postgres:5432/${APVERO_DB_NAME:-apvero}
+      APVERO_DB_USER: ${APVERO_DB_USER:-apvero}
+      APVERO_DB_PASSWORD: ${APVERO_DB_PASSWORD:-apvero}
+      APVERO_SERVER_PORT: 8080
+      APVERO_DEFAULT_LOCALE: ${APVERO_DEFAULT_LOCALE:-en}
+      APVERO_SECURITY_MODE: ${APVERO_SECURITY_MODE:-development}
+      APVERO_BOOTSTRAP_ADMIN_TOKEN: ${APVERO_BOOTSTRAP_ADMIN_TOKEN:-}
+      APVERO_REAL_PROVIDER_ENABLED: ${APVERO_REAL_PROVIDER_ENABLED:-false}
+      APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS: ${APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    ports:
+      - "${APVERO_BIND_ADDRESS:-127.0.0.1}:${APVERO_SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  ai-worker:
+    build:
+      context: ../..
+      dockerfile: apps/ai-worker/Dockerfile
+    ports:
+      - "${APVERO_BIND_ADDRESS:-127.0.0.1}:${APVERO_WORKER_PORT:-8090}:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=2)"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    restart: unless-stopped
+
+  console:
+    build:
+      context: ../..
+      dockerfile: apps/console/Dockerfile
+    ports:
+      - "${APVERO_BIND_ADDRESS:-127.0.0.1}:${APVERO_CONSOLE_PORT:-3000}:3000"
+    depends_on:
+      platform-server:
+        condition: service_healthy
+      ai-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  apvero_postgres:
+    name: apvero_postgres

@@ -1,0 +1,168 @@
+schemaVersion: 2
+product: Apvero
+
+dataModes:
+  live: server-confirmed data only
+  mixed: live data and clearly labeled demo projections are visually separated
+  demo: preview fixtures are visibly labeled and never presented as server-confirmed state
+
+pages:
+  overview:
+    navigationLevel: primary
+    dataMode: mixed
+    backendStatus: baseline
+    sections: [kpis, usage-trend, provider-health, recent-runs, recent-releases, alerts]
+    interactions: [date-range, workspace-filter, drill-down]
+  applications:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [application-list, runtime-modes, agents, workflows, lifecycle, current-release, owner, usage]
+    interactions: [create, filter, filter-runtime-mode, open-studio]
+  models:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [providers, models, routes, failover, load-balancing, health, pricing, usage]
+    interactions: [register, health-check, route-editor, enable-disable]
+  prompts:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [library, editor, variables, versions, diff, testing, publishing, usage-relations]
+    interactions: [create, edit, test, publish, rollback]
+  knowledge:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: worker-utility-baseline
+    sections: [knowledge-bases, data-sources, documents, ingestion-pipeline, chunks, indexes, retrieval-lab]
+    interactions: [create, upload, sync, inspect-job, retrieval-test]
+  capabilities:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [tools, mcp-servers, memory-providers, schemas, authentication, permissions, quotas, invocation-history]
+    interactions: [register, discover, connect, test, enable-disable, inspect]
+  evaluations:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [datasets, cases, evaluators, evaluation-runs, experiments, ab-tests, feedback, reports, release-gates]
+    interactions: [create-dataset, run, compare, review-feedback, promote-case, promote-gate]
+  playground:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [configuration, input, streaming-output, usage, trace, captured-case]
+    interactions: [configure, execute-demo, stop, save-case]
+  releases:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [release-bundles, manifest, digest, evaluation-gates, environments, deployment-history]
+    interactions: [create, inspect, execute-local]
+  gateway:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [traffic, routes, rate-limits, quotas, caching, failover, policies, errors]
+    interactions: [route-editor, policy-toggle, purge-cache, inspect]
+  runs:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [runs, traces, tool-calls, errors, provider, tokens, cost, latency, observability]
+    interactions: [filter, inspect, copy-trace]
+  integrations:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [webhooks, event-subscriptions, destinations, kafka, email, slack, dingtalk, feishu, delivery-log, dead-letter]
+    interactions: [create, test, rotate-secret, retry]
+  usage:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [usage, costs, budgets, forecast, cache-savings, dimensions, trends]
+    interactions: [date-range, dimension-filter, edit-budget, export]
+  guardrails:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [input-policies, output-policies, sensitive-data, prompt-injection, incidents]
+    interactions: [create, test, enable-disable, review]
+  audit:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [actor, action, resource, before-after, source, outcome]
+    interactions: [filter, inspect, export]
+  workspaces:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [workspaces, environments, members, applications, quotas, status]
+    interactions: [create, archive, inspect]
+  accessControl:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [members, invitations, roles, policies, identity-providers, login-status]
+    interactions: [invite, suspend, assign-role, edit-policy, configure-provider]
+  apiKeys:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [keys, scopes, applications, quotas, expiry, last-used]
+    interactions: [create-once, rotate, revoke, inspect]
+  secrets:
+    navigationLevel: primary
+    dataMode: live
+    backendStatus: baseline
+    sections: [secret-references, type, scope, rotation, usage-relations]
+    interactions: [create-once, rotate, revoke, inspect-metadata]
+  organizations:
+    navigationLevel: conditional
+    visibleWhen: multiTenantAdministration
+    dataMode: demo
+    backendStatus: planned
+    sections: [organizations, plans, workspaces, members, status, usage]
+    interactions: [create, suspend, inspect]
+  extensions:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: contract-only
+    sections: [marketplace, installed, compatibility, permissions, digest, signature, runner-health]
+    interactions: [search, inspect, request-install, configure, disable, uninstall]
+  health:
+    navigationLevel: primary
+    dataMode: mixed
+    backendStatus: actuator-baseline
+    sections: [services, providers, mcp, data-sources, resources, versions]
+    interactions: [refresh, inspect]
+  settings:
+    navigationLevel: primary
+    dataMode: demo
+    backendStatus: planned
+    sections: [general, locale, retention, notifications, feature-controls]
+    interactions: [edit, validate, save]
+
+reservedViews:
+  agents: {parent: applications, status: preview, legacyRoute: agents}
+  workflows: {parent: applications, status: deferred, legacyRoute: workflows}
+  tools: {parent: capabilities, status: preview, legacyRoute: tools}
+  mcp: {parent: capabilities, status: preview, legacyRoute: mcp}
+  memory: {parent: capabilities, status: deferred, legacyRoute: memory}
+  feedback: {parent: evaluations, status: preview, legacyRoute: feedback}
+  budgets: {parent: usage, status: preview, legacyRoute: budgets}
+  members: {parent: accessControl, status: preview, legacyRoute: members}
+  roles: {parent: accessControl, status: preview, legacyRoute: roles}
+  marketplace: {parent: extensions, status: preview, legacyRoute: marketplace}
+
+prototypeRules:
+  - Every demo page displays a Demo data badge.
+  - Demo mutations update device-local preview state only and say so explicitly.
+  - Live create, release and run actions continue to use the existing server API.
+  - Planned behavior never displays a fake server success message.
+  - Reserved views remain documented even when they are not primary navigation entries.
+  - Every page has loading, empty, error, populated and permission-denied designs before backend implementation.
