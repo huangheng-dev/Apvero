@@ -1,6 +1,6 @@
 # P1 治理闭环验证
 
-状态：实现候选已通过本地验证；阶段跃迁尚未批准。
+状态：维护者已验收；P1 已完成，P2 成为当前交付阶段。
 
 ## 已闭合流程
 
@@ -27,6 +27,9 @@
 - OpenAPI 3.1：有效。仅保留一条既有提示：公开的平台信息接口没有人为添加无意义的 4XX 响应。
 - Compose 配置：有效。
 
-## 尚未通过的退出门禁
+## 阶段决议
 
-标准 Platform Server 镜像构建无法获取 Docker Hub 的 `eclipse-temurin:25-jre` 授权令牌。项目没有因此修改既定 JDK、镜像、Dockerfile 或架构。P1 跃迁 P2 之前仍需建立干净提交、推送并取得绿色 GitHub CI，再由维护者批准阶段跃迁。
+- 候选提交 `ba4f5d5` 已发布到 [PR #1](https://github.com/huangheng-dev/Apvero/pull/1)。
+- [GitHub CI 运行 29812538566](https://github.com/huangheng-dev/Apvero/actions/runs/29812538566) 的五项任务全部通过：Backend、Console、Worker、Contracts 与 Compose 配置。
+- 维护者已于 2026-07-21 批准 P1 验收以及 P1→P2 阶段跃迁。
+- 本地 Docker Hub 授权令牌失败继续作为外部环境限制留档；项目没有因此修改既定 JDK、镜像、Dockerfile 或架构基线。

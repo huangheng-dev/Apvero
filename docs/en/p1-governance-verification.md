@@ -1,6 +1,6 @@
 # P1 Governance Closure Verification
 
-Status: implementation candidate verified locally; stage transition is not yet approved.
+Status: accepted by the maintainer; P1 is complete and P2 is the active delivery stage.
 
 ## Closed workflow
 
@@ -27,6 +27,9 @@ Verified on 2026-07-21:
 - OpenAPI 3.1 lint: valid. One existing warning remains for the intentionally public Platform information operation having no artificial 4XX response.
 - Compose configuration: valid.
 
-## Remaining exit gate
+## Stage decision
 
-The standard Platform Server image build could not fetch the Docker Hub authorization token for `eclipse-temurin:25-jre`. The adopted JDK, image, Dockerfile, and architecture were not changed. A clean commit and green GitHub CI run are still required before the maintainer can approve the P1-to-P2 transition.
+- Candidate commit `ba4f5d5` was published in [PR #1](https://github.com/huangheng-dev/Apvero/pull/1).
+- [GitHub CI run 29812538566](https://github.com/huangheng-dev/Apvero/actions/runs/29812538566) passed all five jobs: Backend, Console, Worker, Contracts, and Compose configuration.
+- The maintainer approved the P1 acceptance and P1-to-P2 transition on 2026-07-21.
+- The local Docker Hub authorization-token failure remains recorded as an external environment limitation. It did not require or justify changing the adopted JDK, image, Dockerfile, or architecture baseline.

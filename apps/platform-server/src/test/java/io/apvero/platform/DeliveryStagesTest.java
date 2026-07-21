@@ -20,7 +20,7 @@ class DeliveryStagesTest {
         List<Map<String, Object>> stages = castList(document.get("stages"));
 
         assertThat(stages).extracting(stage -> stage.get("id")).containsExactlyElementsOf(EXPECTED_STAGE_IDS);
-        assertThat(document.get("currentStage")).isEqualTo("P1");
+        assertThat(document.get("currentStage")).isEqualTo("P2");
         assertThat(stages.stream().filter(stage -> stage.get("id").equals(document.get("currentStage"))).findFirst())
                 .hasValueSatisfying(stage -> assertThat(stage.get("status")).isEqualTo("in-progress"));
 

@@ -1,6 +1,6 @@
 schemaVersion: 1
 project: Apvero
-currentStage: P1
+currentStage: P2
 lastReviewed: 2026-07-21
 
 statusValues: [completed, in-progress, planned]
@@ -51,7 +51,7 @@ stages:
 
   - id: P1
     name: Secure model execution and governance
-    status: in-progress
+    status: completed
     dependsOn: [P0]
     objective: Make model-backed Application preview and release execution safe, attributable, measurable, and cost-controlled.
     primaryModules: [identity, governance, capability-registry, application, release, runtime]
@@ -79,7 +79,7 @@ stages:
 
   - id: P2
     name: Knowledge and grounded RAG
-    status: planned
+    status: in-progress
     dependsOn: [P1]
     objective: Turn source documents into immutable, tenant-isolated knowledge index versions that produce cited answers.
     primaryModules: [knowledge, capability-registry, application, release, runtime]
