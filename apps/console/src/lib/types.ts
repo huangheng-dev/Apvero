@@ -34,8 +34,11 @@ export interface RunRecord {
   id: string;
   applicationId: string;
   releaseBundleId: string;
+  modelRouteId?: string | null;
   status: "SUCCEEDED" | "FAILED";
   providerId: string;
+  actorId: string;
+  governanceReservationId?: string | null;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
   latencyMs: number;
@@ -46,6 +49,28 @@ export interface RunRecord {
   failureCategory?: string | null;
   failureMessage?: string | null;
   createdAt: string;
+}
+
+export interface BudgetPolicy {
+  id: string; name: string; scopeType: "WORKSPACE" | "APPLICATION" | "MODEL_ROUTE"; scopeId?: string | null;
+  monthlyCostLimitMicros?: number | null; requestsPerMinute?: number | null; enabled: boolean;
+  createdAt: string; updatedAt: string;
+}
+
+export interface AuditEvent {
+  id: string; occurredAt: string; actorId: string; action: string; resourceType: string;
+  resourceId?: string | null; outcome: "SUCCEEDED" | "DENIED" | "FAILED"; sourceIp?: string | null;
+  traceId?: string | null; details: Record<string, unknown>;
+}
+
+export interface RetentionPolicy {
+  workspaceId: string; runRetentionDays: number; auditRetentionDays: number; retainPayloads: boolean;
+  maskSensitiveFields: boolean; version: number; createdAt: string; updatedAt: string;
+}
+
+export interface ModelRouteReadiness {
+  routeId: string; routeReference: string; providerName: string; providerType: string; status: string;
+  ready: boolean; reasonCode: string;
 }
 
 export interface SecretReference {

@@ -117,7 +117,7 @@ Apvero
 | `capability-registry` | providers, models, routes and prompts; other capability metadata later | `identity`, `governance` | Baseline |
 | `knowledge` | sources, ingestion, chunks and index versions | `capability-registry` | Worker baseline |
 | `evaluation` | datasets, evaluation runs, experiments and gates | `application`, `release`, `runtime` | Planned |
-| `governance` | environment-backed secret references; budget, audit and retention later | `identity` | Baseline |
+| `governance` | secret references, pre-call budgets and rate limits, reservations, audit and retention | `identity` | P1 baseline |
 | `extension` | plugin compatibility, permissions and signatures | `capability-registry` | Contract only |
 
 No module may query another module's tables. Public interfaces and versioned events are the only collaboration mechanisms. The system starts as a modular monolith; a module becomes a deployable only after an ADR proves an independent scale, isolation, runtime or failure boundary.
@@ -141,7 +141,13 @@ Browser
 
 A production run references one immutable release ID. The release manifest is canonicalized, hashed and stored with the SHA-256 digest. Database composite foreign keys prove tenant/workspace/application consistency; a trigger rejects release update and delete operations. Rollback means moving an environment pointer to an older release, never editing a release.
 
-The current run table is the typed operational source of truth for release identity, trace identity, I/O, token usage, cost, latency, provider adapter ID and status. Configurable retention and masking are planned governance capabilities, not current behavior.
+The run table is the typed operational source of truth for release, route, actor, governance reservation, trace, I/O, token usage, cost, latency, provider adapter and normalized outcome. P1 governance reserves estimated cost before a provider call, settles actual cost afterwards, and applies the workspace retention and sensitive-field masking policy before payload persistence.
+
+## P1 governance path
+
+`runtime` uses the public capability-registry governance facade; it does not depend on governance directly. The facade resolves pinned route pricing and identity, while governance atomically checks matching workspace, application and route policies in PostgreSQL. A rejected request never reaches the provider. Successful configuration mutations are written to an audit ledger without request bodies or secrets. Actuator metrics expose run outcome, tokens, cost and latency; route readiness verifies stored configuration and Secret Reference availability without a billable probe.
+
+V6 and V7 are forward-only migrations. Rollback mitigation is to redeploy the prior binary while leaving the additive governance tables and nullable/defaulted run columns in place; the prior binary ignores them. Never edit or remove an applied migration. Audit rows are database-protected against update/delete, except for the governance-owned transaction-scoped retention purge.
 
 ## Security boundary of the current executable baseline
 

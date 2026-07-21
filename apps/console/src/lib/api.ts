@@ -1,4 +1,4 @@
-import type { AiApplication, ApiCredential, HealthStatus, IssuedApiCredential, ModelDefinition, ModelProvider, ModelRoute, PlatformInfo, PromptAsset, PromptVersion, ReleaseBundle, RunRecord, RuntimeMode, SecretReference, UsageSummary } from "./types";
+import type { AiApplication, ApiCredential, AuditEvent, BudgetPolicy, HealthStatus, IssuedApiCredential, ModelDefinition, ModelProvider, ModelRoute, ModelRouteReadiness, PlatformInfo, PromptAsset, PromptVersion, ReleaseBundle, RetentionPolicy, RunRecord, RuntimeMode, SecretReference, UsageSummary } from "./types";
 
 export const WORKSPACE_ID = "00000000-0000-0000-0000-000000000101";
 
@@ -56,6 +56,12 @@ export const api = {
   preview: (applicationId: string, input: Record<string, unknown>) =>
     request<RunRecord>(`/api/v1/applications/${applicationId}/preview-runs`, { method: "POST", body: JSON.stringify({ input }) }),
   usage: () => request<UsageSummary>("/api/v1/usage"),
+  budgetPolicies: () => request<BudgetPolicy[]>("/api/v1/budget-policies"),
+  createBudgetPolicy: (input: { name: string; scopeType: BudgetPolicy["scopeType"]; scopeId?: string; monthlyCostLimitMicros?: number; requestsPerMinute?: number }) => request<BudgetPolicy>("/api/v1/budget-policies", { method: "POST", body: JSON.stringify(input) }),
+  auditEvents: () => request<AuditEvent[]>("/api/v1/audit-events"),
+  retentionPolicy: () => request<RetentionPolicy>("/api/v1/retention-policy"),
+  updateRetentionPolicy: (input: Pick<RetentionPolicy, "runRetentionDays" | "auditRetentionDays" | "retainPayloads" | "maskSensitiveFields">) => request<RetentionPolicy>("/api/v1/retention-policy", { method: "PUT", body: JSON.stringify(input) }),
+  modelRouteReadiness: () => request<ModelRouteReadiness[]>("/api/v1/model-routes/readiness"),
   secrets: () => request<SecretReference[]>("/api/v1/secrets"),
   createSecret: (input: { name: string; environmentVariable: string }) => request<SecretReference>("/api/v1/secrets", { method: "POST", body: JSON.stringify(input) }),
   modelProviders: () => request<ModelProvider[]>("/api/v1/model-providers"),

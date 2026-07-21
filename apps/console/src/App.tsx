@@ -4,7 +4,7 @@ import i18n from "./i18n";
 import { canView, findNavigationItem, groupForPage, overviewItem, resolvePageId, roles, visibleGroups, type PageId, type Role } from "./app/navigation";
 import { ApplicationsPage, ReleasesPage, RunsPage } from "./pages/LivePages";
 import { DemoCatalogPage, HealthPage, OverviewPage, SettingsPage } from "./pages/PrototypePages";
-import { ApiKeysPage, LivePlaygroundPage, ModelsPage, PromptsPage, SecretsPage, UsagePage } from "./pages/ConfigurationPages";
+import { ApiKeysPage, AuditPage, LivePlaygroundPage, ModelsPage, PromptsPage, SecretsPage, UsagePage } from "./pages/ConfigurationPages";
 
 function initialPage(): PageId {
   const value = window.location.hash.replace(/^#\/?/, "");
@@ -93,6 +93,7 @@ function PageContent({ page, navigate }: { page: PageId; navigate: (page: PageId
   if (page === "runs") return <RunsPage />;
   if (page === "playground") return <LivePlaygroundPage />;
   if (page === "usage") return <UsagePage />;
+  if (page === "audit") return <AuditPage />;
   if (page === "apiKeys") return <ApiKeysPage />;
   if (page === "secrets") return <SecretsPage />;
   if (page === "health") return <HealthPage />;

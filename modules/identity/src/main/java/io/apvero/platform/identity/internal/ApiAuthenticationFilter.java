@@ -14,20 +14,26 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import io.apvero.platform.identity.RequestIdentityAttributes;
+import io.apvero.platform.identity.SecurityDecisionEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Component
 final class ApiAuthenticationFilter extends OncePerRequestFilter {
     private final ApiCredentialAuthenticator credentials;
     private final String mode;
     private final String bootstrapToken;
+    private final ApplicationEventPublisher events;
 
     ApiAuthenticationFilter(
             ApiCredentialAuthenticator credentials,
             @Value("${apvero.security.mode:development}") String mode,
-            @Value("${apvero.security.bootstrap-token:}") String bootstrapToken) {
+            @Value("${apvero.security.bootstrap-token:}") String bootstrapToken,
+            ApplicationEventPublisher events) {
         this.credentials = credentials;
         this.mode = mode;
         this.bootstrapToken = bootstrapToken;
+        this.events = events;
     }
 
     @Override
@@ -47,15 +53,24 @@ final class ApiAuthenticationFilter extends OncePerRequestFilter {
         }
 
         var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            request.setAttribute(RequestIdentityAttributes.ACTOR, authentication.getName());
+            if (authentication.getDetails() instanceof UUID allowedWorkspace) {
+                request.setAttribute(RequestIdentityAttributes.WORKSPACE_ID, allowedWorkspace);
+            }
+        }
         String workspaceHeader = request.getHeader("X-Apvero-Workspace-Id");
         if (authentication != null && authentication.getDetails() instanceof UUID allowedWorkspace && workspaceHeader != null) {
             try {
                 if (!allowedWorkspace.equals(UUID.fromString(workspaceHeader))) {
-                    response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                    events.publishEvent(new SecurityDecisionEvent(allowedWorkspace, authentication.getName(),
+                            request.getMethod() + " " + request.getRequestURI(), workspaceHeader,
+                            request.getRemoteAddr(), "WORKSPACE_ACCESS_DENIED"));
+                    writeProblem(response, HttpServletResponse.SC_FORBIDDEN, "APVERO_WORKSPACE_ACCESS_DENIED");
                     return;
                 }
             } catch (IllegalArgumentException exception) {
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+                writeProblem(response, HttpServletResponse.SC_BAD_REQUEST, "APVERO_WORKSPACE_ID_INVALID");
                 return;
             }
         }
@@ -67,5 +82,12 @@ final class ApiAuthenticationFilter extends OncePerRequestFilter {
         var authentication = UsernamePasswordAuthenticationToken.authenticated(name, null, authorities);
         authentication.setDetails(workspaceId);
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private void writeProblem(HttpServletResponse response, int status, String code) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/problem+json");
+        response.getWriter().write("{\"type\":\"urn:apvero:problem:" + code.toLowerCase(java.util.Locale.ROOT)
+                + "\",\"title\":\"" + code + "\",\"status\":" + status + ",\"code\":\"" + code + "\"}");
     }
 }

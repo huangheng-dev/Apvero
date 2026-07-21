@@ -82,7 +82,7 @@ pages:
   usage:
     navigationLevel: primary
     dataMode: live
-    backendStatus: baseline
+    backendStatus: p1-governed
     sections: [usage, costs, budgets, forecast, cache-savings, dimensions, trends]
     interactions: [date-range, dimension-filter, edit-budget, export]
   guardrails:
@@ -93,10 +93,10 @@ pages:
     interactions: [create, test, enable-disable, review]
   audit:
     navigationLevel: primary
-    dataMode: demo
-    backendStatus: planned
-    sections: [actor, action, resource, before-after, source, outcome]
-    interactions: [filter, inspect, export]
+    dataMode: live
+    backendStatus: p1-baseline
+    sections: [actor, action, resource, source, outcome, retention, payload-masking]
+    interactions: [inspect, update-retention]
   workspaces:
     navigationLevel: primary
     dataMode: demo
@@ -136,9 +136,9 @@ pages:
     interactions: [search, inspect, request-install, configure, disable, uninstall]
   health:
     navigationLevel: primary
-    dataMode: mixed
-    backendStatus: actuator-baseline
-    sections: [services, providers, mcp, data-sources, resources, versions]
+    dataMode: live
+    backendStatus: p1-readiness-baseline
+    sections: [services, provider-readiness, model-route-readiness, resources, versions]
     interactions: [refresh, inspect]
   settings:
     navigationLevel: primary

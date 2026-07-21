@@ -27,6 +27,10 @@ tags:
     description: Metadata-only references to externally injected secrets.
   - name: Access
     description: Once-visible API credentials and access lifecycle.
+  - name: Governance
+    description: Pre-call budgets, append-only audit events, and retention policy.
+  - name: System
+    description: Server-confirmed configuration readiness.
 paths:
   /api/v1/platform:
     get:
@@ -220,6 +224,94 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UsageSummary" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/budget-policies:
+    get:
+      tags: [Governance]
+      summary: List enforced budget policies
+      operationId: listBudgetPolicies
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace-scoped pre-call policies.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/BudgetPolicy" } }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Governance]
+      summary: Create an enforced budget policy
+      operationId: createBudgetPolicy
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBudgetPolicyRequest" }
+      responses:
+        "201":
+          description: Policy created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BudgetPolicy" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/audit-events:
+    get:
+      tags: [Governance]
+      summary: List append-only audit events
+      operationId: listAuditEvents
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Latest 500 workspace-scoped events without request bodies or secrets.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
+        "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/retention-policy:
+    get:
+      tags: [Governance]
+      summary: Get retention and masking policy
+      operationId: getRetentionPolicy
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Effective workspace policy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetentionPolicy" }
+        "401": { $ref: "#/components/responses/Problem" }
+    put:
+      tags: [Governance]
+      summary: Update retention and masking policy
+      operationId: updateRetentionPolicy
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRetentionPolicyRequest" }
+      responses:
+        "200":
+          description: Versioned policy updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetentionPolicy" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/model-routes/readiness:
+    get:
+      tags: [System]
+      summary: List model route configuration readiness
+      description: Does not issue a billable provider request.
+      operationId: listModelRouteReadiness
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Server-confirmed provider, model, route, and Secret Reference readiness.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ModelRouteReadiness" } }
+        "401": { $ref: "#/components/responses/Problem" }
   /api/v1/secrets:
     get:
       tags: [Secrets]
@@ -232,6 +324,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/SecretReference" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Secrets]
       summary: Create an environment Secret Reference
@@ -267,6 +360,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/ModelProvider" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Models]
       summary: Register a provider endpoint
@@ -296,6 +390,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/ModelDefinition" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Models]
       summary: Register a model definition
@@ -325,6 +420,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/ModelRoute" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Models]
       summary: Publish a new immutable route version
@@ -354,6 +450,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/PromptAsset" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Prompts]
       summary: Create a Prompt asset
@@ -388,6 +485,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/PromptVersion" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Prompts]
       summary: Publish an immutable Prompt version
@@ -416,6 +514,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/ApiCredential" } }
+        "401": { $ref: "#/components/responses/Problem" }
     post:
       tags: [Access]
       summary: Issue a once-visible API key
@@ -525,15 +624,18 @@ components:
         createdAt: { type: string, format: date-time }
     RunRecord:
       type: object
-      required: [id, tenantId, workspaceId, applicationId, releaseBundleId, status, providerId, input, output, latencyMs, promptTokens, completionTokens, costMicros, traceId, createdAt]
+      required: [id, tenantId, workspaceId, applicationId, releaseBundleId, status, providerId, actorId, input, output, latencyMs, promptTokens, completionTokens, costMicros, traceId, createdAt]
       properties:
         id: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
         workspaceId: { type: string, format: uuid }
         applicationId: { type: string, format: uuid }
         releaseBundleId: { type: string, format: uuid }
+        modelRouteId: { type: [string, "null"], format: uuid, description: Null only for pre-P1 migrated history. }
         status: { type: string, enum: [SUCCEEDED, FAILED] }
         providerId: { type: string }
+        actorId: { type: string }
+        governanceReservationId: { type: [string, "null"], format: uuid, description: Null only for pre-P1 migrated history. }
         input: { type: object, additionalProperties: true }
         output: { type: object, additionalProperties: true }
         latencyMs: { type: integer, format: int64, minimum: 0 }
@@ -557,6 +659,84 @@ components:
         totalTokens: { type: integer, format: int64, minimum: 0 }
         costMicros: { type: integer, format: int64, minimum: 0 }
         averageLatencyMs: { type: number, minimum: 0 }
+    BudgetPolicy:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, name, scopeType, enabled, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        scopeType: { type: string, enum: [WORKSPACE, APPLICATION, MODEL_ROUTE] }
+        scopeId: { type: [string, "null"], format: uuid }
+        monthlyCostLimitMicros: { type: [integer, "null"], format: int64, minimum: 0 }
+        requestsPerMinute: { type: [integer, "null"], minimum: 1 }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateBudgetPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scopeType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        scopeType: { type: string, enum: [WORKSPACE, APPLICATION, MODEL_ROUTE] }
+        scopeId: { type: [string, "null"], format: uuid }
+        monthlyCostLimitMicros: { type: [integer, "null"], format: int64, minimum: 0 }
+        requestsPerMinute: { type: [integer, "null"], minimum: 1 }
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, occurredAt, actorId, action, resourceType, outcome, details]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        actorId: { type: string }
+        action: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: [string, "null"] }
+        outcome: { type: string, enum: [SUCCEEDED, DENIED, FAILED] }
+        sourceIp: { type: [string, "null"] }
+        traceId: { type: [string, "null"] }
+        details: { type: object, additionalProperties: true }
+    RetentionPolicy:
+      type: object
+      additionalProperties: false
+      required: [workspaceId, tenantId, runRetentionDays, auditRetentionDays, retainPayloads, maskSensitiveFields, version, createdAt, updatedAt]
+      properties:
+        workspaceId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        runRetentionDays: { type: integer, minimum: 1, maximum: 3650 }
+        auditRetentionDays: { type: integer, minimum: 30, maximum: 3650 }
+        retainPayloads: { type: boolean }
+        maskSensitiveFields: { type: boolean }
+        version: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UpdateRetentionPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [runRetentionDays, auditRetentionDays, retainPayloads, maskSensitiveFields]
+      properties:
+        runRetentionDays: { type: integer, minimum: 1, maximum: 3650 }
+        auditRetentionDays: { type: integer, minimum: 30, maximum: 3650 }
+        retainPayloads: { type: boolean }
+        maskSensitiveFields: { type: boolean }
+    ModelRouteReadiness:
+      type: object
+      additionalProperties: false
+      required: [routeId, routeReference, providerName, providerType, status, ready, reasonCode]
+      properties:
+        routeId: { type: string, format: uuid }
+        routeReference: { type: string }
+        providerName: { type: string }
+        providerType: { type: string }
+        status: { type: string }
+        ready: { type: boolean }
+        reasonCode: { type: string }
     SecretReference:
       type: object
       additionalProperties: false

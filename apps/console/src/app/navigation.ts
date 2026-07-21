@@ -42,7 +42,7 @@ export const navigationGroups: NavigationGroup[] = [
   { id: "govern", items: [
     { id: "usage", glyph: "UC", dataMode: "live" },
     { id: "guardrails", glyph: "GU", dataMode: "demo" },
-    { id: "audit", glyph: "AU", dataMode: "demo" },
+    { id: "audit", glyph: "AU", dataMode: "live" },
   ]},
   { id: "organization", items: [
     { id: "workspaces", glyph: "WS", dataMode: "demo" },
@@ -53,7 +53,7 @@ export const navigationGroups: NavigationGroup[] = [
   { id: "system", items: [
     { id: "organizations", glyph: "OR", dataMode: "demo", badge: "conditional" },
     { id: "extensions", glyph: "EX", dataMode: "demo" },
-    { id: "health", glyph: "HE", dataMode: "mixed" },
+    { id: "health", glyph: "HE", dataMode: "live" },
     { id: "settings", glyph: "ST", dataMode: "demo" },
   ]},
 ];
