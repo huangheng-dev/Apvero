@@ -117,7 +117,7 @@ Apvero
 | `capability-registry` | Provider、模型、路由、Prompt；其他能力元数据后续实现 | `identity`、`governance` | 基线 |
 | `knowledge` | 数据源、摄取任务、Chunk、索引版本 | `capability-registry` | Worker 基线 |
 | `evaluation` | 数据集、评测运行、实验、门禁 | `application`、`release`、`runtime` | 规划 |
-| `governance` | 环境变量型 Secret Reference；预算、审计、留存后续实现 | `identity` | 基线 |
+| `governance` | Secret Reference、调用前预算与限流、费用预留、审计、留存 | `identity` | P1 基线 |
 | `extension` | Plugin 兼容性、权限、签名 | `capability-registry` | 只有契约 |
 
 模块不能查询其他模块拥有的数据表；只能调用公开接口或消费版本化事件。系统首先采用模块化单体。只有 ADR 用真实证据证明某个模块需要独立扩缩容、隔离、运行时或故障边界，才允许拆成独立部署单元。
@@ -141,7 +141,13 @@ Browser
 
 每次生产运行必须引用一个不可变 Release ID。Manifest 会先规范化，再计算 SHA-256 并入库。数据库复合外键保证 Tenant、Workspace、Application 归属一致；触发器拒绝 Release 的更新与删除。回滚是把环境指针切到旧 Release，不是修改旧 Release。
 
-当前 `ai_run` 是 Release 身份、Trace 身份、输入输出、Token 用量、成本、延迟、Provider 适配器身份与状态的运行事实账本。可配置留存与脱敏属于规划中的治理能力，不是当前行为。
+`ai_run` 是 Release、模型路由、操作主体、治理预留、Trace、输入输出、Token、成本、延迟、Provider 适配器与规范化结果的运行事实账本。P1 会在 Provider 调用前预留估算费用，调用后按真实费用结算，并在输入输出持久化前执行工作区留存与敏感字段脱敏策略。
+
+## P1 治理路径
+
+`runtime` 只调用 capability-registry 的公开治理门面，不直接依赖 governance。该门面解析发布包固定路由的身份与价格，governance 再通过 PostgreSQL 原子检查工作区、应用和路由策略；被拒绝的请求不会到达 Provider。成功的配置变更会写入不含请求正文与密钥的审计账本。Actuator 指标暴露运行结果、Token、成本与延迟；路由就绪检查只核对服务端配置和 Secret Reference 可用性，不产生计费探测。
+
+V6、V7 是只向前迁移。回滚缓解方案是部署上一个应用版本，同时保留新增治理表以及 Run 的可空/带默认值字段；旧版本会忽略它们。禁止修改或删除已经执行的迁移。数据库会拒绝审计记录的更新与删除，唯一例外是 governance 在事务内显式开启的到期清理路径。
 
 ## 当前可执行基线的安全边界
 

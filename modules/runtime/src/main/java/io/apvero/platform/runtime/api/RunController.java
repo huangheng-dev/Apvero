@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
+import java.security.Principal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,8 +40,10 @@ final class RunController {
     ResponseEntity<RunRecord> execute(
             @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
             @PathVariable UUID applicationId,
+            Principal principal,
             @Valid @RequestBody ExecuteRunRequest request) {
-        RunRecord run = runs.execute(workspaceId, applicationId, new ExecuteRunCommand(request.releaseId(), request.input()));
+        RunRecord run = runs.execute(workspaceId, applicationId,
+                new ExecuteRunCommand(request.releaseId(), request.input(), principal.getName()));
         return ResponseEntity.ok(run);
     }
 
@@ -48,9 +51,11 @@ final class RunController {
     ResponseEntity<RunRecord> preview(
             @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
             @PathVariable UUID applicationId,
+            Principal principal,
             @Valid @RequestBody PreviewRunRequest request) {
         var preview = releases.createPreview(workspaceId, applicationId);
-        RunRecord run = runs.execute(workspaceId, applicationId, new ExecuteRunCommand(preview.id(), request.input()));
+        RunRecord run = runs.execute(workspaceId, applicationId,
+                new ExecuteRunCommand(preview.id(), request.input(), principal.getName()));
         return ResponseEntity.ok(run);
     }
 

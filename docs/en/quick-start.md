@@ -28,6 +28,9 @@ All published ports bind to `127.0.0.1` by default. Development mode supplies a 
 3. Open **Releases**, select the application and create version `1.0.0`.
 4. Select the release, enter an input and choose **Execute**.
 5. Open **Runs** or **Usage & Costs** and inspect provider, tokens, latency, cost and trace ID.
+6. In **Usage & Costs**, create a monthly cost and request-rate budget; enforcement occurs before provider execution.
+7. Open **Audit Logs** to inspect attributed mutations and configure payload retention and masking.
+8. Open **System Health** to inspect server-confirmed model route readiness without a paid probe.
 
 This flow uses `local-deterministic@1.0.0`; it requires no provider key and never claims to be an external model.
 

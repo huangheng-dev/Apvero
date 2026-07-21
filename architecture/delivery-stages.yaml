@@ -1,7 +1,7 @@
 schemaVersion: 1
 project: Apvero
 currentStage: P1
-lastReviewed: 2026-07-20
+lastReviewed: 2026-07-21
 
 statusValues: [completed, in-progress, planned]
 
@@ -56,6 +56,9 @@ stages:
     objective: Make model-backed Application preview and release execution safe, attributable, measurable, and cost-controlled.
     primaryModules: [identity, governance, capability-registry, application, release, runtime]
     workflow: secret-reference -> provider -> model -> route -> prompt -> application -> preview -> release -> run -> usage
+    verificationEvidence:
+      - docs/en/p1-governance-verification.md
+      - docs/zh-CN/p1-governance-verification.md
     deliverables:
       - api-credential-authentication-and-scope
       - versioned-provider-model-route-and-prompt

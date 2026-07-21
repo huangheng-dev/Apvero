@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.spring.boot.webmvc)
     implementation(libs.spring.boot.validation)
     implementation(libs.spring.boot.jooq)
+    implementation(libs.spring.boot.actuator)
     implementation(libs.spring.ai.model)
     implementation(libs.spring.ai.openai)
 

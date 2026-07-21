@@ -77,4 +77,11 @@ public class DefaultSecretReferenceCatalog implements SecretReferenceCatalog {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("Referenced environment secret is unavailable.");
         return new ResolvedSecret(value.toCharArray());
     }
+
+    @Override
+    public boolean isAvailable(UUID workspaceId, UUID secretReferenceId) {
+        SecretReference reference = get(workspaceId, secretReferenceId);
+        String value = environment.getProperty(reference.locator());
+        return "ACTIVE".equals(reference.status()) && value != null && !value.isBlank();
+    }
 }

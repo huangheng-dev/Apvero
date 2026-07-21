@@ -12,6 +12,7 @@ import io.apvero.platform.runtime.ProviderResult;
 import io.apvero.platform.runtime.RunRecord;
 import io.apvero.platform.runtime.RunStatus;
 import io.apvero.platform.runtime.UsageSummary;
+import io.apvero.platform.capability.ExecutionPermit;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -32,8 +33,11 @@ public class JooqRunRepository implements RunRepository {
     private static final Field<UUID> WORKSPACE_ID = field("workspace_id", UUID.class);
     private static final Field<UUID> APPLICATION_ID = field("application_id", UUID.class);
     private static final Field<UUID> RELEASE_ID = field("release_bundle_id", UUID.class);
+    private static final Field<UUID> MODEL_ROUTE_ID = field("model_route_id", UUID.class);
     private static final Field<String> STATUS = field("status", String.class);
     private static final Field<String> PROVIDER_ID = field("provider_id", String.class);
+    private static final Field<String> ACTOR_ID = field("actor_id", String.class);
+    private static final Field<UUID> RESERVATION_ID = field("governance_reservation_id", UUID.class);
     private static final Field<JSONB> INPUT = field("input", JSONB.class);
     private static final Field<JSONB> OUTPUT = field("output", JSONB.class);
     private static final Field<Long> LATENCY_MS = field("latency_ms", Long.class);
@@ -55,7 +59,8 @@ public class JooqRunRepository implements RunRepository {
 
     @Override
     public List<RunRecord> findAll(UUID workspaceId) {
-        return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, STATUS, PROVIDER_ID,
+        return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
+                        ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
                         FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
                 .from(RUN)
@@ -70,18 +75,22 @@ public class JooqRunRepository implements RunRepository {
             AiApplication application,
             ReleaseBundle release,
             String providerId,
+            String actorId,
+            ExecutionPermit permit,
             JsonNode input,
+            JsonNode output,
             ProviderResult result,
             long latencyMs,
             String traceId) {
         UUID id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         sql.insertInto(RUN)
-                .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, STATUS, PROVIDER_ID,
+                .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
+                        ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID, CREATED_AT)
                 .values(id, application.tenantId(), application.workspaceId(), application.id(), release.id(),
-                        RunStatus.SUCCEEDED.name(), providerId, JSONB.valueOf(input.toString()),
-                        JSONB.valueOf(result.output().toString()), latencyMs, result.promptTokens(),
+                        permit.modelRouteId(), RunStatus.SUCCEEDED.name(), providerId, actorId, permit.reservationId(),
+                        JSONB.valueOf(input.toString()), JSONB.valueOf(output.toString()), latencyMs, result.promptTokens(),
                         result.completionTokens(), result.costMicros(), traceId, now)
                 .execute();
         return findById(application.workspaceId(), id);
@@ -92,6 +101,8 @@ public class JooqRunRepository implements RunRepository {
             AiApplication application,
             ReleaseBundle release,
             String providerId,
+            String actorId,
+            ExecutionPermit permit,
             JsonNode input,
             long latencyMs,
             String traceId,
@@ -100,11 +111,13 @@ public class JooqRunRepository implements RunRepository {
         UUID id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         sql.insertInto(RUN)
-                .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, STATUS, PROVIDER_ID,
+                .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
+                        ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
                         FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
                 .values(id, application.tenantId(), application.workspaceId(), application.id(), release.id(),
-                        RunStatus.FAILED.name(), providerId, JSONB.valueOf(input.toString()), JSONB.valueOf("{}"),
+                        permit.modelRouteId(), RunStatus.FAILED.name(), providerId, actorId, permit.reservationId(),
+                        JSONB.valueOf(input.toString()), JSONB.valueOf("{}"),
                         latencyMs, 0, 0, 0L, traceId, failureCategory, failureMessage, now)
                 .execute();
         return findById(application.workspaceId(), id);
@@ -131,8 +144,14 @@ public class JooqRunRepository implements RunRepository {
         return new UsageSummary(runs, successful, failed, prompt, completion, prompt + completion, cost, latency);
     }
 
+    @Override
+    public int deleteBefore(UUID workspaceId, OffsetDateTime cutoff) {
+        return sql.deleteFrom(RUN).where(WORKSPACE_ID.eq(workspaceId).and(CREATED_AT.lt(cutoff))).execute();
+    }
+
     private RunRecord findById(UUID workspaceId, UUID id) {
-        return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, STATUS, PROVIDER_ID,
+        return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
+                        ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
                         FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
                 .from(RUN)
@@ -145,7 +164,8 @@ public class JooqRunRepository implements RunRepository {
         try {
             return new RunRecord(
                     record.get(ID), record.get(TENANT_ID), record.get(WORKSPACE_ID), record.get(APPLICATION_ID),
-                    record.get(RELEASE_ID), RunStatus.valueOf(record.get(STATUS)), record.get(PROVIDER_ID),
+                    record.get(RELEASE_ID), record.get(MODEL_ROUTE_ID), RunStatus.valueOf(record.get(STATUS)),
+                    record.get(PROVIDER_ID), record.get(ACTOR_ID), record.get(RESERVATION_ID),
                     json.readTree(record.get(INPUT).data()), json.readTree(record.get(OUTPUT).data()),
                     record.get(LATENCY_MS), record.get(PROMPT_TOKENS), record.get(COMPLETION_TOKENS),
                     record.get(COST_MICROS), record.get(TRACE_ID), record.get(FAILURE_CATEGORY),

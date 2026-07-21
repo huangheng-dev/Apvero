@@ -17,7 +17,7 @@ modules:
 
   - id: capability-registry
     status: baseline
-    implementedOwns: [model-provider, model, model-route, prompt, prompt-version]
+    implementedOwns: [model-provider, model, model-route, prompt, prompt-version, model-route-readiness, execution-governance-facade]
     plannedOwns: [tool, mcp-server, knowledge-source, memory-provider, evaluator, guardrail]
     publicApi: io.apvero.platform.capability
     databaseTables: [model_provider, model_definition, model_route, prompt_asset, prompt_version]
@@ -31,7 +31,7 @@ modules:
 
   - id: runtime
     status: baseline
-    implementedOwns: [run-ledger, trace-identity, token-usage, cost, runtime-provider-port]
+    implementedOwns: [run-ledger, trace-identity, actor-identity, governance-reservation-link, token-usage, cost, runtime-metrics, runtime-provider-port]
     plannedOwns: [normalized-trace-spans, streaming, provider-routing]
     publicApi: io.apvero.platform.runtime
     databaseTables: [ai_run]
@@ -48,10 +48,10 @@ modules:
 
   - id: governance
     status: baseline
-    implementedOwns: [secret-reference]
-    plannedOwns: [budget, audit-event, retention-policy]
+    implementedOwns: [secret-reference, budget-policy, rate-limit, execution-reservation, audit-event, retention-policy]
+    plannedOwns: []
     publicApi: io.apvero.platform.governance
-    databaseTables: [secret_reference]
+    databaseTables: [secret_reference, budget_policy, rate_limit_counter, execution_reservation, audit_event, retention_policy]
 
   - id: extension
     status: planned

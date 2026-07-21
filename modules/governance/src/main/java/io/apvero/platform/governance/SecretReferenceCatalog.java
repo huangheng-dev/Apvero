@@ -8,4 +8,5 @@ public interface SecretReferenceCatalog {
     SecretReference create(UUID workspaceId, String name, String environmentVariable);
     SecretReference get(UUID workspaceId, UUID secretReferenceId);
     ResolvedSecret resolve(UUID workspaceId, UUID secretReferenceId);
+    boolean isAvailable(UUID workspaceId, UUID secretReferenceId);
 }

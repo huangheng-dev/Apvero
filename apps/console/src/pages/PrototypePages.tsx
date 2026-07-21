@@ -112,8 +112,9 @@ export function HealthPage() {
   const platform = useQuery({ queryKey: ["platform"], queryFn: api.platform });
   const platformHealth = useQuery({ queryKey: ["platform-health"], queryFn: api.platformHealth });
   const workerHealth = useQuery({ queryKey: ["worker-health"], queryFn: api.workerHealth });
-  const refresh = () => { void platform.refetch(); void platformHealth.refetch(); void workerHealth.refetch(); };
-  const error = platform.error ?? platformHealth.error ?? workerHealth.error;
+  const routes = useQuery({ queryKey: ["model-route-readiness"], queryFn: api.modelRouteReadiness });
+  const refresh = () => { void platform.refetch(); void platformHealth.refetch(); void workerHealth.refetch(); void routes.refetch(); };
+  const error = platform.error ?? platformHealth.error ?? workerHealth.error ?? routes.error;
   const services: Array<[string, string, string, string]> = [
     [t("health.platform"), platformHealth.data?.status ?? "CHECKING", "Java 25 · Spring Boot 4.1", "8080"],
     [t("health.database"), platformHealth.data?.status ?? "CHECKING", "PostgreSQL 18 · pgvector", "5432"],
@@ -121,10 +122,10 @@ export function HealthPage() {
     [t("health.console"), "HEALTHY", "React 19 · Nginx", "3000"],
   ];
   return <>
-    <PageHeader title={t("nav.health")} description={t("pages.health")} group={t("nav.system")} mode="mixed" action={<button className="button primary" onClick={refresh}>↻ {t("health.refresh")}</button>} />
+    <PageHeader title={t("nav.health")} description={t("pages.health")} group={t("nav.system")} mode="live" action={<button className="button primary" onClick={refresh}>↻ {t("health.refresh")}</button>} />
     {error && <ErrorPanel error={error} />}
     <div className="section-label"><span>{t("dataMode.live")}</span><p>{t("health.liveServices")}</p></div><div className="health-grid">{services.map(([name, status, stack, port]) => <article key={name}><div><span className="service-mark">{name.slice(0, 2).toUpperCase()}</span><StatusBadge status={status === "UP" ? "HEALTHY" : status} /></div><h2>{name}</h2><p>{stack}</p><footer><code>127.0.0.1:{port}</code><span>{t("common.lastUpdated")}</span></footer></article>)}</div>
-    <div className="section-label demo-section"><span>{t("dataMode.demo")}</span><p>{t("health.projectedServices")}</p></div><div className="health-grid projected"><article><div><span className="service-mark">MO</span><StatusBadge status="WARNING" /></div><h2>{t("health.providers")}</h2><p>{t("health.providerSummary")}</p><footer><code>{t("health.routeCount")}</code><span>{t("dataMode.demo")}</span></footer></article><article><div><span className="service-mark">MC</span><StatusBadge status="HEALTHY" /></div><h2>{t("health.mcpRegistry")}</h2><p>{t("health.mcpSummary")}</p><footer><code>p95 184 ms</code><span>{t("dataMode.demo")}</span></footer></article><article><div><span className="service-mark">QU</span><StatusBadge status="DRAFT" /></div><h2>{t("health.backgroundJobs")}</h2><p>{t("health.jobsSummary")}</p><footer><code>{t("health.queued")}</code><span>{t("dataMode.demo")}</span></footer></article></div>
+    <div className="section-label"><span>{t("dataMode.live")}</span><p>{t("health.routeReadiness")}</p></div><div className="health-grid">{routes.data?.map((route) => <article key={route.routeId}><div><span className="service-mark">AI</span><StatusBadge status={route.ready ? "HEALTHY" : "WARNING"} /></div><h2>{route.routeReference}</h2><p>{route.providerName} · {route.providerType}</p><footer><code>{route.reasonCode}</code><span>{route.status}</span></footer></article>)}</div>
     <Panel title={t("health.buildIdentity")} meta={t("dataMode.live")}><dl className="inline-details"><div><dt>{t("common.product")}</dt><dd>{platform.data?.name ?? "—"}</dd></div><div><dt>{t("common.version")}</dt><dd>{platform.data?.version ?? "—"}</dd></div><div><dt>{t("common.locales")}</dt><dd>{platform.data?.supportedLocales.join(", ") ?? "—"}</dd></div><div><dt>{t("common.status")}</dt><dd>{platform.data?.status ?? "—"}</dd></div></dl></Panel>
   </>;
 }

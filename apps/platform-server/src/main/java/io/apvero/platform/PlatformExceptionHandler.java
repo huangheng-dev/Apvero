@@ -2,6 +2,8 @@ package io.apvero.platform;
 
 import io.apvero.platform.application.ApplicationNotFoundException;
 import io.apvero.platform.release.ReleaseNotFoundException;
+import io.apvero.platform.governance.BudgetExceededException;
+import io.apvero.platform.governance.RateLimitExceededException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -29,6 +31,16 @@ class PlatformExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail invalidRequest(IllegalArgumentException exception) {
         return problem(HttpStatus.BAD_REQUEST, "APVERO_INVALID_REQUEST", exception.getMessage());
+    }
+
+    @ExceptionHandler(BudgetExceededException.class)
+    ProblemDetail budgetExceeded(BudgetExceededException exception) {
+        return problem(HttpStatus.TOO_MANY_REQUESTS, "APVERO_BUDGET_EXCEEDED", exception.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ProblemDetail rateLimitExceeded(RateLimitExceededException exception) {
+        return problem(HttpStatus.TOO_MANY_REQUESTS, "APVERO_RATE_LIMIT_EXCEEDED", exception.getMessage());
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
