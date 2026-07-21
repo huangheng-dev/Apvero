@@ -1,0 +1,206 @@
+schemaVersion: 1
+project: Apvero
+currentStage: P1
+lastReviewed: 2026-07-20
+
+statusValues: [completed, in-progress, planned]
+
+deliveryPolicy:
+  sequentialDelivery: true
+  laterStagePrototypeAllowed: true
+  rules:
+    - A later-stage prototype or contract may be prepared, but it must remain labeled demo, planned, or contract-only.
+    - A later stage cannot become live or baseline until every dependency stage passes its exit criteria.
+    - A stage is delivered as an end-to-end workflow, never as disconnected pages or CRUD inventory.
+    - Protected architecture, security, contract, release, module, or technology changes still require an approved ADR.
+    - The maintainer approves every stage transition after verification evidence is recorded.
+
+universalExitGates:
+  - domain-model-and-module-boundaries
+  - forward-migration-and-rollback-mitigation
+  - public-api-and-schema-contracts
+  - authorization-and-tenant-isolation
+  - telemetry-audit-and-safe-errors
+  - english-and-simplified-chinese-ui-and-docs
+  - success-failure-and-boundary-tests
+  - compose-health-and-reproducible-run
+  - clean-git-commit-and-green-ci
+
+stages:
+  - id: P0
+    name: Foundation and product constitution
+    status: completed
+    dependsOn: []
+    objective: Establish one enforceable architecture, product surface, repository, local stack, and contribution contract.
+    primaryModules: [application, release, runtime]
+    workflow: architecture -> contracts -> runnable-baseline -> ci -> public-repository
+    deliverables:
+      - modular-monolith-boundaries
+      - application-release-run-spine
+      - bilingual-console-and-docs
+      - navigation-and-page-inventory
+      - docker-compose-and-postgres
+      - openapi-json-schema-and-adrs
+      - ai-development-constitution
+      - github-ci-and-initial-baseline
+    exitCriteria:
+      - Architecture and product authority files are committed.
+      - The local deterministic workflow runs without a paid provider.
+      - English and Simplified Chinese coverage checks pass.
+      - GitHub CI passes on the public main branch.
+
+  - id: P1
+    name: Secure model execution and governance
+    status: in-progress
+    dependsOn: [P0]
+    objective: Make model-backed Application preview and release execution safe, attributable, measurable, and cost-controlled.
+    primaryModules: [identity, governance, capability-registry, application, release, runtime]
+    workflow: secret-reference -> provider -> model -> route -> prompt -> application -> preview -> release -> run -> usage
+    deliverables:
+      - api-credential-authentication-and-scope
+      - versioned-provider-model-route-and-prompt
+      - immutable-preview-and-production-release-binding
+      - spring-ai-openai-compatible-adapter
+      - rate-limit-and-budget-enforcement
+      - audit-event-ledger
+      - provider-readiness-and-runtime-metrics
+      - retention-masking-and-structured-error-policy
+      - postgres-integration-and-migration-tests
+    exitCriteria:
+      - Unauthorized and cross-workspace access is denied.
+      - Secrets are referenced and never persisted or returned as plaintext.
+      - Over-limit and over-budget execution is rejected before a billable call.
+      - Every configuration mutation and execution has an auditable identity.
+      - Success and failure runs record release, trace, usage, cost, latency, and normalized outcome.
+      - Audit, Budgets, Usage, Runs, and System Health show server-confirmed data.
+
+  - id: P2
+    name: Knowledge and grounded RAG
+    status: planned
+    dependsOn: [P1]
+    objective: Turn source documents into immutable, tenant-isolated knowledge index versions that produce cited answers.
+    primaryModules: [knowledge, capability-registry, application, release, runtime]
+    workflow: source -> ingest -> parse -> chunk -> embed -> index-version -> retrieve-test -> bind -> release -> cited-answer
+    deliverables:
+      - file-web-and-markdown-source-baseline
+      - persisted-ingestion-job-and-lineage
+      - deterministic-chunking-and-pgvector-index
+      - retrieval-inspector-with-score-and-source
+      - immutable-knowledge-index-version
+      - release-pinned-knowledge-binding
+      - citation-bearing-runtime-output
+      - deletion-and-resynchronization-propagation
+    exitCriteria:
+      - Every document and chunk has workspace scope and source lineage.
+      - Failed ingestion is resumable and does not publish a partial index.
+      - Retrieval tests expose ranked chunks, scores, and sources.
+      - A ReleaseBundle pins an immutable knowledge index version.
+      - Cross-workspace retrieval tests fail closed.
+      - A released RAG Application returns verifiable citations.
+
+  - id: P3
+    name: Tools and MCP capabilities
+    status: planned
+    dependsOn: [P2]
+    objective: Let Applications perform governed external actions through typed, permissioned, observable capabilities.
+    primaryModules: [capability-registry, governance, application, release, runtime]
+    workflow: register -> schema -> secret -> permission -> test -> bind -> invoke -> trace -> audit
+    deliverables:
+      - http-and-read-only-sql-tool-baseline
+      - mcp-server-registration-and-discovery
+      - json-schema-input-and-output
+      - method-level-permissions-and-approval
+      - isolated-execution-boundary
+      - timeout-quota-idempotency-and-retry-policy
+      - invocation-trace-and-audit
+    exitCriteria:
+      - Capabilities are denied until explicitly granted.
+      - SQL execution is read-only and constrained by schema, row, and timeout policy.
+      - Tool and MCP calls validate typed input and output.
+      - Secrets and sensitive arguments are masked.
+      - Failure cannot corrupt the parent Run or execute an unapproved retry.
+
+  - id: P4
+    name: Governed Agent runtime
+    status: planned
+    dependsOn: [P3]
+    objective: Deliver Agent as a versioned Application runtime mode composed from already governed capabilities.
+    primaryModules: [application, capability-registry, release, runtime, governance]
+    workflow: configure -> preview -> inspect-steps -> evaluate -> release -> invoke -> observe
+    deliverables:
+      - agent-application-draft
+      - versioned-model-prompt-knowledge-tool-mcp-and-memory-binding
+      - bounded-step-runtime
+      - human-approval-for-high-risk-actions
+      - full-step-trace-and-cost
+      - loop-time-and-budget-guards
+    exitCriteria:
+      - A published Agent cannot silently change a pinned dependency.
+      - Step, time, token, cost, and retry limits are enforced.
+      - High-risk actions require an explicit approval decision.
+      - Every model, retrieval, tool, and MCP step is traceable.
+
+  - id: P5
+    name: Evaluation, feedback, and release gates
+    status: planned
+    dependsOn: [P4]
+    objective: Convert production evidence into versioned tests that prevent quality regressions before release.
+    primaryModules: [evaluation, application, release, runtime, governance]
+    workflow: run -> feedback -> curated-case -> dataset-version -> candidate -> evaluation -> comparison -> release-gate
+    deliverables:
+      - versioned-datasets-and-cases
+      - deterministic-model-graded-and-human-evaluators
+      - regression-and-candidate-comparison
+      - feedback-to-case-promotion
+      - ab-experiment-baseline
+      - immutable-evaluation-report
+      - enforceable-release-gate
+    exitCriteria:
+      - Candidate changes run against a versioned dataset.
+      - Quality regressions can block release automatically.
+      - Evaluation evidence is immutable and pinned by the release.
+      - Production feedback can become reviewed regression cases.
+
+  - id: P6
+    name: Gateway and integrations
+    status: planned
+    dependsOn: [P5]
+    objective: Provide one governed Application API for external systems, streaming clients, events, and delivery destinations.
+    primaryModules: [identity, application, release, runtime, governance]
+    workflow: client -> api-key -> gateway -> release -> runtime -> response -> event -> destination
+    deliverables:
+      - application-gateway-api
+      - scoped-api-key-and-idempotency
+      - sse-streaming-with-usage
+      - exact-and-policy-controlled-semantic-cache
+      - signed-webhook-and-delivery-log
+      - retry-and-dead-letter
+      - java-and-typescript-sdk-baseline
+    exitCriteria:
+      - External clients invoke Applications rather than provider endpoints.
+      - Duplicate idempotent requests cannot execute or charge twice.
+      - Streaming requests retain complete usage, cost, trace, and failure records.
+      - Webhook delivery is signed, retryable, and recoverable from dead letter.
+
+  - id: P7
+    name: Enterprise administration and extension ecosystem
+    status: planned
+    dependsOn: [P6]
+    objective: Complete enterprise identity, operations, deployment, and safely isolated extension capabilities for 1.0.
+    primaryModules: [identity, governance, extension]
+    workflow: enterprise-identity -> policy -> environment-promotion -> operate -> extend -> verify -> upgrade
+    deliverables:
+      - oidc-ldap-and-scim-adapters
+      - fine-grained-policy-administration
+      - environment-promotion-and-rollback-pointer
+      - backup-restore-and-retention-operations
+      - signed-plugin-package-and-compatibility
+      - out-of-process-plugin-runner
+      - helm-and-high-availability-guidance
+      - upgrade-and-migration-verification
+    exitCriteria:
+      - Enterprise identity and resource policy are deny-by-default and auditable.
+      - Environment promotion preserves immutable release identity.
+      - Backup and restore are tested against documented recovery objectives.
+      - Extensions declare permissions, pass integrity and signature checks, and run outside the control plane.
+      - The complete self-hosted 1.0 workflow is reproducible from published documentation.

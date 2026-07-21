@@ -72,17 +72,20 @@ See [English quick start](docs/en/quick-start.md) or [中文快速开始](docs/z
 
 Read the [complete architecture](docs/en/architecture.md) and [technology stack](docs/en/technology-stack.md). Target capabilities are explicitly marked as implemented, baseline, contract-only, or planned.
 
+Implementation order and stage exit criteria are defined in the [delivery roadmap](docs/en/roadmap.md). The current stage is also recorded in machine-readable form at [`architecture/delivery-stages.yaml`](architecture/delivery-stages.yaml).
+
 ## Architecture authority
 
 AI-assisted development and human contributions must read these files before changing code:
 
 1. [AGENTS.md](AGENTS.md)
 2. [architecture/invariants.yaml](architecture/invariants.yaml)
-3. [`product/navigation.yaml`](product/navigation.yaml) and [`product/pages.yaml`](product/pages.yaml)
-4. [architecture/modules.yaml](architecture/modules.yaml)
-5. [architecture/dependency-rules.yaml](architecture/dependency-rules.yaml)
-6. approved records under `docs/adr/`
-7. public contracts under `contracts/`
+3. [architecture/delivery-stages.yaml](architecture/delivery-stages.yaml)
+4. [`product/navigation.yaml`](product/navigation.yaml) and [`product/pages.yaml`](product/pages.yaml)
+5. [architecture/modules.yaml](architecture/modules.yaml)
+6. [architecture/dependency-rules.yaml](architecture/dependency-rules.yaml)
+7. approved records under `docs/adr/`
+8. public contracts under `contracts/`
 
 If a change conflicts with a protected rule, implementation stops until a maintainer approves an ADR.
 

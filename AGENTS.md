@@ -16,12 +16,13 @@ When instructions conflict, follow this order:
 
 1. maintainer-approved ADRs;
 2. `architecture/invariants.yaml`;
-3. `product/navigation.yaml` and `product/pages.yaml`;
-4. `architecture/modules.yaml` and `architecture/dependency-rules.yaml`;
-5. public contracts under `contracts/`;
-6. architecture and product documentation;
-7. current implementation;
-8. an AI-generated suggestion or task interpretation.
+3. `architecture/delivery-stages.yaml`;
+4. `product/navigation.yaml` and `product/pages.yaml`;
+5. `architecture/modules.yaml` and `architecture/dependency-rules.yaml`;
+6. public contracts under `contracts/`;
+7. architecture and product documentation;
+8. current implementation;
+9. an AI-generated suggestion or task interpretation.
 
 Never silently resolve a conflict against a higher-authority source.
 
@@ -65,6 +66,16 @@ Never silently resolve a conflict against a higher-authority source.
 10. Optional infrastructure stays behind adapters. The default self-hosted deployment remains usable with PostgreSQL as the only mandatory stateful dependency.
 11. Spring AI is the single core Java AI abstraction. LangChain4j and Spring AI Alibaba may appear only in isolated compatibility adapters approved by ADR.
 
+## Delivery stage rules
+
+1. `architecture/delivery-stages.yaml` is the canonical implementation order and current-stage record.
+2. Complete the current stage's workflow and exit criteria before making a dependent later stage live or baseline.
+3. Later-stage contracts and prototypes may be prepared only when they remain explicitly labeled `contract-only`, `planned`, or `demo`.
+4. Do not skip a stage to increase feature count or imitate another product.
+5. A stage is not complete with pages or CRUD alone; all universal exit gates must pass.
+6. The maintainer approves stage transitions after verification evidence is recorded.
+7. Stage approval does not replace an ADR required for a protected architecture change.
+
 ## Security rules
 
 1. Never store provider keys, API keys, passwords, tokens, or webhook secrets in plaintext.
@@ -89,10 +100,11 @@ Never silently resolve a conflict against a higher-authority source.
 
 1. Read this file completely.
 2. Read `architecture/invariants.yaml` completely.
-3. Read the target module entry in `architecture/modules.yaml`.
-4. Read applicable dependency rules and public contracts.
-5. State target modules, allowed dependencies, affected contracts, migration needs, and tests.
-6. Determine whether the request changes an invariant, boundary, contract, release semantic, security policy, or technology baseline.
+3. Read `architecture/delivery-stages.yaml` completely and confirm the current stage.
+4. Read the target module entry in `architecture/modules.yaml`.
+5. Read applicable dependency rules and public contracts.
+6. State target stage, modules, allowed dependencies, affected contracts, migration needs, and tests.
+7. Determine whether the request changes an invariant, boundary, contract, release semantic, security policy, or technology baseline.
 
 If a protected area changes, stop implementation and propose an ADR containing context, decision, alternatives, compatibility, migration, security, operability, open-source impact, and rollback plan. Implementation starts only after maintainer approval.
 

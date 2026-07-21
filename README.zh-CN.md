@@ -72,17 +72,20 @@ docker compose -f deploy/compose/compose.yaml up --build
 
 完整设计参见[中文完整架构](docs/zh-CN/architecture.md)与[完整技术栈](docs/zh-CN/technology-stack.md)。所有目标能力都会明确标注为“已实现、基线、只有契约或规划”，不会把设计图冒充成成品。
 
+具体实施顺序和阶段退出条件参见[分阶段交付路线图](docs/zh-CN/roadmap.md)，当前阶段同时记录在机器可读的 [`architecture/delivery-stages.yaml`](architecture/delivery-stages.yaml) 中。
+
 ## 架构权威顺序
 
 AI 编程和人工贡献在修改代码前必须依次阅读：
 
 1. [AGENTS.md](AGENTS.md)
 2. [architecture/invariants.yaml](architecture/invariants.yaml)
-3. [`product/navigation.yaml`](product/navigation.yaml) 与 [`product/pages.yaml`](product/pages.yaml)
-4. [architecture/modules.yaml](architecture/modules.yaml)
-5. [architecture/dependency-rules.yaml](architecture/dependency-rules.yaml)
-6. `docs/adr/` 中已经批准的决策
-7. `contracts/` 中的公共契约
+3. [architecture/delivery-stages.yaml](architecture/delivery-stages.yaml)
+4. [`product/navigation.yaml`](product/navigation.yaml) 与 [`product/pages.yaml`](product/pages.yaml)
+5. [architecture/modules.yaml](architecture/modules.yaml)
+6. [architecture/dependency-rules.yaml](architecture/dependency-rules.yaml)
+7. `docs/adr/` 中已经批准的决策
+8. `contracts/` 中的公共契约
 
 如果修改与受保护规则冲突，必须停止实现，等待维护者批准 ADR。
 

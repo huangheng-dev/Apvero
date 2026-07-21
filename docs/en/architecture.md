@@ -12,6 +12,8 @@ Design -> Test -> Evaluate -> Release -> Run -> Observe -> Feedback -> Improve
    +--------------------------------------------------------------------+
 ```
 
+The dependency-ordered implementation plan and exit gates are defined in the [delivery roadmap](roadmap.md). Architecture describes the complete target; the roadmap controls when each capability may become live.
+
 ## Complete capability tree
 
 ```text
