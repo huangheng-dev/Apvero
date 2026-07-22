@@ -1,6 +1,6 @@
 # P2.1 Durable Ingestion Spine — Implementation Plan
 
-Status: maintainer-approved plan; implementation has not started and is not authorized by this documentation change
+Status: maintainer-approved plan; implementation is in progress and this document does not authorize deviations from the approved slices
 
 Target stage: P2, milestone P2.1
 
