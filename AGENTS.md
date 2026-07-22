@@ -76,6 +76,15 @@ Never silently resolve a conflict against a higher-authority source.
 6. The maintainer approves stage transitions after verification evidence is recorded.
 7. Stage approval does not replace an ADR required for a protected architecture change.
 
+## Git workflow rules
+
+1. Branch namespaces are purpose-based and language-neutral: `docs/`, `feature/`, `fix/`, `refactor/`, `chore/`, and `release/`.
+2. Planning and documentation use `docs/`; business implementation uses `feature/`. Tool, model, agent, contributor, or vendor names are not branch prefixes.
+3. Keep approved planning and implementation on separate branches and pull requests.
+4. Create commits at coherent, verified checkpoints; do not commit every file save or incomplete experiment.
+5. Remote GitHub writes use the GitHub API by default and verify Blob, Tree, Commit, and Ref identities. Git Smart HTTP is a fallback transport.
+6. Branch names are lowercase kebab-case after the namespace, for example `feature/p2-1a-module-safety-shell`.
+
 ## Security rules
 
 1. Never store provider keys, API keys, passwords, tokens, or webhook secrets in plaintext.
