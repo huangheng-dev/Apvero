@@ -50,3 +50,8 @@ apvero:
     max-snapshot-bytes: ${APVERO_KNOWLEDGE_MAX_SNAPSHOT_BYTES:5242880}
     max-docx-entries: ${APVERO_KNOWLEDGE_MAX_DOCX_ENTRIES:2048}
     max-docx-expanded-bytes: ${APVERO_KNOWLEDGE_MAX_DOCX_EXPANDED_BYTES:20971520}
+    web-capture:
+      max-redirects: ${APVERO_KNOWLEDGE_WEB_MAX_REDIRECTS:5}
+      max-header-bytes: ${APVERO_KNOWLEDGE_WEB_MAX_HEADER_BYTES:65536}
+      connect-timeout: ${APVERO_KNOWLEDGE_WEB_CONNECT_TIMEOUT:2s}
+      read-timeout: ${APVERO_KNOWLEDGE_WEB_READ_TIMEOUT:5s}

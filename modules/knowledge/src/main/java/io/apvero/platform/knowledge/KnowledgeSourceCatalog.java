@@ -20,6 +20,12 @@ public interface KnowledgeSourceCatalog {
             CreateUploadedKnowledgeSourceCommand command,
             KnowledgeCommandContext context);
 
+    SourceIngestionReceipt createWeb(
+            UUID workspaceId,
+            UUID knowledgeBaseId,
+            CreateWebKnowledgeSourceCommand command,
+            KnowledgeCommandContext context);
+
     SourceRevisionReceipt addInlineRevision(
             UUID workspaceId,
             UUID sourceId,
@@ -30,6 +36,11 @@ public interface KnowledgeSourceCatalog {
             UUID workspaceId,
             UUID sourceId,
             AddUploadedKnowledgeSourceRevisionCommand command,
+            KnowledgeCommandContext context);
+
+    SourceSyncReceipt synchronizeWeb(
+            UUID workspaceId,
+            UUID sourceId,
             KnowledgeCommandContext context);
 
     KnowledgeSourceSnapshot readRevisionContent(UUID workspaceId, UUID revisionId);

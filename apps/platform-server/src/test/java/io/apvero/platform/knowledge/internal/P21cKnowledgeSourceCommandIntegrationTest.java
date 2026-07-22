@@ -15,6 +15,7 @@ import io.apvero.platform.knowledge.AddUploadedKnowledgeSourceRevisionCommand;
 import io.apvero.platform.knowledge.CreateInlineKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.CreateKnowledgeBaseCommand;
 import io.apvero.platform.knowledge.CreateUploadedKnowledgeSourceCommand;
+import io.apvero.platform.knowledge.CreateWebKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.KnowledgeBase;
 import io.apvero.platform.knowledge.KnowledgeBaseCatalog;
 import io.apvero.platform.knowledge.KnowledgeCommandContext;
@@ -24,8 +25,13 @@ import io.apvero.platform.knowledge.KnowledgeSource;
 import io.apvero.platform.knowledge.KnowledgeSourceCatalog;
 import io.apvero.platform.knowledge.SourceIngestionReceipt;
 import io.apvero.platform.knowledge.SourceRevisionReceipt;
+import io.apvero.platform.knowledge.SourceSyncReceipt;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -90,6 +96,77 @@ class P21cKnowledgeSourceCommandIntegrationTest {
     @Autowired JdbcTemplate sql;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired KnowledgeWebSnapshotCompletion webCompletion;
+
+    @Test
+    void schedulesWebCreationAndResynchronizationWithoutLeakingTheLocator() throws Exception {
+        WorkspaceScope scope = createScope("web");
+        KnowledgeBase base = bases.create(scope.workspaceId(),
+                new CreateKnowledgeBaseCommand(slug("web"), "Public docs", ""), CONTEXT);
+
+        SourceIngestionReceipt created = sources.createWeb(scope.workspaceId(), base.id(),
+                new CreateWebKnowledgeSourceCommand(
+                        "Guide", URI.create("HTTPS://Example.COM:443/a/../guide#fragment")), CONTEXT);
+
+        assertThat(created.source().sourceType()).isEqualTo(KnowledgeSource.Type.WEB);
+        assertThat(created.source().revisionCount()).isZero();
+        assertThat(created.revision()).isNull();
+        assertThat(created.job().status()).isEqualTo(KnowledgeIngestionJob.Status.QUEUED);
+        assertThat(created.job().currentStep()).isEqualTo(KnowledgeIngestionJob.Step.SNAPSHOTTING);
+        assertThat(sql.queryForObject(
+                "select canonical_web_uri from knowledge_source where id = ?", String.class,
+                created.source().id())).isEqualTo("https://example.com/guide");
+
+        assertThatThrownBy(() -> sources.synchronizeWeb(scope.workspaceId(), created.source().id(), CONTEXT))
+                .isInstanceOf(KnowledgeException.class)
+                .extracting(exception -> ((KnowledgeException) exception).code())
+                .isEqualTo("APVERO_KNOWLEDGE_WEB_SYNC_ALREADY_ACTIVE");
+
+        byte[] firstSnapshot = "<html>version 1</html>".getBytes(StandardCharsets.UTF_8);
+        URI canonical = URI.create("https://example.com/guide");
+        SafeWebCapture.CapturedWebSnapshot captured = new SafeWebCapture.CapturedWebSnapshot(
+                canonical, canonical, "{\"status\":200,\"contentType\":\"text/html\",\"redirectCount\":0}",
+                new KnowledgeCapturedSnapshot(
+                        KnowledgeSource.Type.WEB, "text/html", null, digest(firstSnapshot), firstSnapshot));
+        KnowledgeWebSnapshotCompletion.CompletionResult changed =
+                webCompletion.complete(scope, created.job().id(), captured);
+        assertThat(changed.outcome()).isEqualTo(KnowledgeWebSnapshotCompletion.Outcome.CHANGED);
+        assertThat(changed.job().status().name()).isEqualTo("QUEUED");
+        assertThat(changed.job().currentStep().name()).isEqualTo("PARSING");
+        assertThat(sql.queryForObject(
+                "select capture_metadata->>'contentType' from knowledge_source_revision where id = ?",
+                String.class, changed.revision().id())).isEqualTo("text/html");
+
+        SourceSyncReceipt synchronizedSource = sources.synchronizeWeb(
+                scope.workspaceId(), created.source().id(), CONTEXT);
+        assertThat(synchronizedSource.outcome()).isEqualTo(SourceSyncReceipt.Outcome.SCHEDULED);
+        assertThat(synchronizedSource.job().sourceRevisionId()).isNull();
+        KnowledgeWebSnapshotCompletion.CompletionResult unchanged =
+                webCompletion.complete(scope, synchronizedSource.job().id(), captured);
+        assertThat(unchanged.outcome()).isEqualTo(KnowledgeWebSnapshotCompletion.Outcome.UNCHANGED);
+        assertThat(unchanged.job().status().name()).isEqualTo("READY");
+        assertThat(unchanged.job().currentStep().name()).isEqualTo("COMPLETE");
+        assertThat(sql.queryForObject(
+                "select count(*) from knowledge_source_revision where source_id = ?", Integer.class,
+                created.source().id())).isEqualTo(1);
+        assertThat(sql.queryForObject(
+                "select count(*) from knowledge_ingestion_job where source_id = ?", Integer.class,
+                created.source().id())).isEqualTo(2);
+
+        mvc.perform(post("/api/v1/knowledge-bases/{baseId}/sources", base.id())
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, scope.workspaceId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sourceType":"WEB","name":"Public API","url":"https://www.example.org/docs"}
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.source.sourceType").value("WEB"))
+                .andExpect(jsonPath("$.revision").doesNotExist())
+                .andExpect(jsonPath("$.job.currentStep").value("SNAPSHOTTING"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("example.org"))));
+    }
 
     @Test
     void closesInlineRevisionNoOpContentAndTombstoneWorkflow() {
@@ -306,6 +383,14 @@ class P21cKnowledgeSourceCommandIntegrationTest {
 
     private static byte[] pdf(String value) {
         return ("%PDF-1.4\n" + value + "\n%%EOF").getBytes(StandardCharsets.ISO_8859_1);
+    }
+
+    private static String digest(byte[] bytes) {
+        try {
+            return "sha256:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     @FunctionalInterface

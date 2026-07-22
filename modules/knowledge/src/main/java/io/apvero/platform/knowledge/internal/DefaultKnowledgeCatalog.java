@@ -8,6 +8,7 @@ import io.apvero.platform.knowledge.AddUploadedKnowledgeSourceRevisionCommand;
 import io.apvero.platform.knowledge.CreateInlineKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.CreateKnowledgeBaseCommand;
 import io.apvero.platform.knowledge.CreateUploadedKnowledgeSourceCommand;
+import io.apvero.platform.knowledge.CreateWebKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.KnowledgeAvailability;
 import io.apvero.platform.knowledge.KnowledgeBase;
 import io.apvero.platform.knowledge.KnowledgeBaseCatalog;
@@ -21,6 +22,7 @@ import io.apvero.platform.knowledge.KnowledgeSourceRevision;
 import io.apvero.platform.knowledge.KnowledgeSourceSnapshot;
 import io.apvero.platform.knowledge.SourceIngestionReceipt;
 import io.apvero.platform.knowledge.SourceRevisionReceipt;
+import io.apvero.platform.knowledge.SourceSyncReceipt;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.BaseRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.BaseStatus;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.IngestionJobRow;
@@ -145,6 +147,30 @@ public class DefaultKnowledgeCatalog implements KnowledgeBaseCatalog, KnowledgeS
 
     @Override
     @Transactional
+    public SourceIngestionReceipt createWeb(
+            UUID workspaceId,
+            UUID knowledgeBaseId,
+            CreateWebKnowledgeSourceCommand command,
+            KnowledgeCommandContext context) {
+        WorkspaceScope scope = scope(workspaceId);
+        requireBase(scope, knowledgeBaseId);
+        if (command == null) {
+            throw problem("APVERO_KNOWLEDGE_REQUEST_INVALID", Category.BAD_REQUEST);
+        }
+        String canonicalUri = SafeWebCapture.canonicalize(command.url()).toASCIIString();
+        OffsetDateTime now = now();
+        SourceRow source = repository.insertSource(scope, new SourceRow(
+                UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), knowledgeBaseId,
+                requireName(command.name()), SourceType.WEB, SourceStatus.ACTIVE, canonicalUri,
+                0, null, 1, null, null, now, now));
+        IngestionJobRow job = insertSnapshotJob(scope, source, JobKind.CREATE_SOURCE, now);
+        appendAudit(workspaceId, context, "knowledge.source.created", "knowledge-source", source.id());
+        appendAudit(workspaceId, context, "knowledge.source.web-sync-requested", "knowledge-ingestion-job", job.id());
+        return new SourceIngestionReceipt(mapSource(source), null, mapJob(job));
+    }
+
+    @Override
+    @Transactional
     public SourceRevisionReceipt addInlineRevision(
             UUID workspaceId,
             UUID sourceId,
@@ -183,6 +209,25 @@ public class DefaultKnowledgeCatalog implements KnowledgeBaseCatalog, KnowledgeS
             throw problem("APVERO_KNOWLEDGE_SOURCE_TYPE_CONFLICT", Category.CONFLICT);
         }
         return addRevision(scope, source, snapshot, context);
+    }
+
+    @Override
+    @Transactional
+    public SourceSyncReceipt synchronizeWeb(
+            UUID workspaceId,
+            UUID sourceId,
+            KnowledgeCommandContext context) {
+        WorkspaceScope scope = scope(workspaceId);
+        SourceRow source = lockActiveSource(scope, sourceId);
+        if (source.sourceType() != SourceType.WEB) {
+            throw problem("APVERO_KNOWLEDGE_SOURCE_TYPE_CONFLICT", Category.CONFLICT);
+        }
+        if (repository.hasActiveWebSnapshotJob(scope, source.id())) {
+            throw problem("APVERO_KNOWLEDGE_WEB_SYNC_ALREADY_ACTIVE", Category.CONFLICT);
+        }
+        IngestionJobRow job = insertSnapshotJob(scope, source, JobKind.SYNCHRONIZE_SOURCE, now());
+        appendAudit(workspaceId, context, "knowledge.source.web-sync-requested", "knowledge-ingestion-job", job.id());
+        return new SourceSyncReceipt(SourceSyncReceipt.Outcome.SCHEDULED, mapSource(source), mapJob(job));
     }
 
     @Override
@@ -288,6 +333,20 @@ public class DefaultKnowledgeCatalog implements KnowledgeBaseCatalog, KnowledgeS
         return repository.insertJob(scope, new IngestionJobRow(
                 jobId, scope.tenantId(), scope.workspaceId(), source.knowledgeBaseId(), source.id(), revision.id(),
                 jobKind, JobStatus.QUEUED, JobStep.PARSING, SyncOutcome.CHANGED,
+                0, MAXIMUM_ATTEMPTS, null, null, null, 1,
+                jobKind.name().toLowerCase(Locale.ROOT) + ":" + jobId,
+                false, null, null, EMPTY_JSON, false, null, null, createdAt, createdAt));
+    }
+
+    private IngestionJobRow insertSnapshotJob(
+            WorkspaceScope scope,
+            SourceRow source,
+            JobKind jobKind,
+            OffsetDateTime createdAt) {
+        UUID jobId = UUID.randomUUID();
+        return repository.insertJob(scope, new IngestionJobRow(
+                jobId, scope.tenantId(), scope.workspaceId(), source.knowledgeBaseId(), source.id(), null,
+                jobKind, JobStatus.QUEUED, JobStep.SNAPSHOTTING, null,
                 0, MAXIMUM_ATTEMPTS, null, null, null, 1,
                 jobKind.name().toLowerCase(Locale.ROOT) + ":" + jobId,
                 false, null, null, EMPTY_JSON, false, null, null, createdAt, createdAt));

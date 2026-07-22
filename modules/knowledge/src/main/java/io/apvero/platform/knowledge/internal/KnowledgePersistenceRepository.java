@@ -63,4 +63,22 @@ interface KnowledgePersistenceRepository {
     IngestionJobRow insertJob(WorkspaceScope scope, IngestionJobRow row);
 
     Optional<IngestionJobRow> findJob(WorkspaceScope scope, UUID jobId);
+
+    boolean hasActiveWebSnapshotJob(WorkspaceScope scope, UUID sourceId);
+
+    Optional<IngestionJobRow> lockJob(WorkspaceScope scope, UUID jobId);
+
+    Optional<IngestionJobRow> advanceWebJobAfterChangedSnapshot(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            UUID sourceRevisionId,
+            OffsetDateTime updatedAt);
+
+    Optional<IngestionJobRow> completeWebJobWithoutChange(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            UUID sourceRevisionId,
+            OffsetDateTime completedAt);
 }

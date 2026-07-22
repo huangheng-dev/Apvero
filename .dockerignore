@@ -2,6 +2,9 @@
 .github
 .gradle
 **/build
+!apps/platform-server/build/
+!apps/platform-server/build/libs/
+!apps/platform-server/build/libs/*.jar
 **/dist
 **/node_modules
 **/.venv
