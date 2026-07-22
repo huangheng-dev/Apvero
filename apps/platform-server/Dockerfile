@@ -8,9 +8,6 @@ FROM eclipse-temurin:25-jre AS runtime-base
 LABEL org.opencontainers.image.title="Apvero Platform Server"
 LABEL org.opencontainers.image.source="https://github.com/huangheng-dev/Apvero"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --create-home apvero
 WORKDIR /app
 USER 10001
