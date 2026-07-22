@@ -41,8 +41,16 @@ This flow uses `local-deterministic@1.0.0`; it requires no provider key and neve
 | Console | <http://localhost:3000> |
 | Platform info | <http://localhost:8080/api/v1/platform> |
 | Platform health | <http://localhost:8080/actuator/health> |
-| Worker health | <http://localhost:8090/health> |
-| Worker OpenAPI | <http://localhost:8090/docs> |
+
+The AI worker is intentionally absent from the default profile. It has no host port, Console proxy, or public OpenAPI page. P2 implementation verification may start it with `docker compose --profile knowledge ...`; only the Platform Server can then reach its health and internal contract on `knowledge-internal`.
+
+If upgrading a checkout that previously published port `8090`, stop the legacy container before the first new deployment so the old port mapping cannot survive an inactive profile:
+
+```bash
+docker compose --profile knowledge -f deploy/compose/compose.yaml stop ai-worker
+```
+
+When Knowledge verification is explicitly required, `docker compose --profile knowledge -f deploy/compose/compose.yaml up -d --build ai-worker` recreates it with the private-network-only configuration.
 
 ## Stop and reset
 

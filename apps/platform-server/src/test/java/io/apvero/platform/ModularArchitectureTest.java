@@ -24,6 +24,7 @@ class ModularArchitectureTest {
                     "io.apvero.platform.identity..",
                     "io.apvero.platform.governance..",
                     "io.apvero.platform.capability..",
+                    "io.apvero.platform.knowledge..",
                     "io.apvero.platform.release..",
                     "io.apvero.platform.runtime..")
             .should()
@@ -42,6 +43,7 @@ class ModularArchitectureTest {
                     "io.apvero.platform.identity..",
                     "io.apvero.platform.governance..",
                     "io.apvero.platform.capability..",
+                    "io.apvero.platform.knowledge..",
                     "io.apvero.platform.release..",
                     "io.apvero.platform.runtime..")
             .should()
@@ -51,6 +53,28 @@ class ModularArchitectureTest {
                     "io.apvero.platform.identity.internal..",
                     "io.apvero.platform.governance.internal..",
                     "io.apvero.platform.capability.internal..",
+                    "io.apvero.platform.knowledge.internal..",
                     "io.apvero.platform.release.internal..",
                     "io.apvero.platform.runtime.internal..");
+
+    @ArchTest
+    static final ArchRule KNOWLEDGE_DEPENDS_ONLY_ON_APPROVED_MODULES = noClasses()
+            .that()
+            .resideInAnyPackage("io.apvero.platform.knowledge..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "io.apvero.platform.application..",
+                    "io.apvero.platform.release..",
+                    "io.apvero.platform.runtime..",
+                    "io.apvero.platform.evaluation..",
+                    "io.apvero.platform.extension..");
+
+    @ArchTest
+    static final ArchRule KNOWLEDGE_INTERNALS_STAY_PRIVATE = noClasses()
+            .that()
+            .resideOutsideOfPackage("io.apvero.platform.knowledge..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("io.apvero.platform.knowledge.internal..");
 }

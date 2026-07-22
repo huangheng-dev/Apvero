@@ -111,11 +111,11 @@ Apvero
 | 模块 | 数据与业务所有权 | 允许依赖 | 状态 |
 |---|---|---|---|
 | `application` | 应用根对象、运行模式、基础生命周期元数据 | 无 | 基线 |
-| `release` | 不可变发布制品与摘要 | `application`、`capability-registry` | 基线 |
-| `runtime` | 运行账本、Trace 身份、Provider SPI | `application`、`release`、`capability-registry` | 基线 |
+| `release` | 不可变发布制品与摘要 | `application`、`capability-registry`、`knowledge` | 基线 |
+| `runtime` | 运行账本、Trace 身份、Provider SPI | `application`、`release`、`capability-registry`、`knowledge` | 基线 |
 | `identity` | 租户、工作区、主体、API 粗粒度角色、哈希凭证 | 无 | 基线 |
 | `capability-registry` | Provider、模型、路由、Prompt；其他能力元数据后续实现 | `identity`、`governance` | 基线 |
-| `knowledge` | 数据源、摄取任务、Chunk、索引版本 | `capability-registry` | Worker 基线 |
+| `knowledge` | 数据源、摄取任务、Chunk、索引版本 | `identity`、`capability-registry`、`governance` | P2.1a 模块与安全外壳；API 禁用 |
 | `evaluation` | 数据集、评测运行、实验、门禁 | `application`、`release`、`runtime` | 规划 |
 | `governance` | Secret Reference、调用前预算与限流、费用预留、审计、留存 | `identity` | P1 基线 |
 | `extension` | Plugin 兼容性、权限、签名 | `capability-registry` | 只有契约 |
@@ -129,12 +129,12 @@ Browser
   -> Console / Nginx :3000
        -> Platform Server :8080
             -> PostgreSQL 18 + pgvector :5432
-       -> AI Worker :8090
+            -> AI Worker :8090【knowledge Profile；仅私有内部网络】
 ```
 
 - **Platform Server：** Java 25、Spring Boot 4.1、Spring Modulith 2.1、Spring AI 2.0、jOOQ、Flyway。
 - **Console：** Node.js 24、React 19.2、严格 TypeScript、Vite 8、TanStack Query、i18next。
-- **AI Worker：** Python 3.14、FastAPI、Pydantic。它是无状态工作单元，不拥有核心业务真相。
+- **AI Worker：** Python 3.14、FastAPI、Pydantic。它是无状态工作单元，不拥有核心业务真相，没有宿主机/浏览器路由，并且只在 Knowledge 私有网络运行。
 - **默认数据层：** PostgreSQL 18 + pgvector；任何可选基础设施都不能成为隐藏依赖。
 
 ## 发布与运行真相

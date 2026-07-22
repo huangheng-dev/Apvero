@@ -111,11 +111,11 @@ Apvero
 | Module | Owns | Allowed dependencies | Status |
 |---|---|---|---|
 | `application` | application root, runtime mode, basic lifecycle metadata | none | Baseline |
-| `release` | immutable release artifact and digest | `application`, `capability-registry` | Baseline |
-| `runtime` | run ledger, trace identity and provider SPI | `application`, `release`, `capability-registry` | Baseline |
+| `release` | immutable release artifact and digest | `application`, `capability-registry`, `knowledge` | Baseline |
+| `runtime` | run ledger, trace identity and provider SPI | `application`, `release`, `capability-registry`, `knowledge` | Baseline |
 | `identity` | tenants, workspaces, principals, coarse API roles and hashed credentials | none | Baseline |
 | `capability-registry` | providers, models, routes and prompts; other capability metadata later | `identity`, `governance` | Baseline |
-| `knowledge` | sources, ingestion, chunks and index versions | `capability-registry` | Worker baseline |
+| `knowledge` | sources, ingestion, chunks and index versions | `identity`, `capability-registry`, `governance` | P2.1a module and safety shell; APIs disabled |
 | `evaluation` | datasets, evaluation runs, experiments and gates | `application`, `release`, `runtime` | Planned |
 | `governance` | secret references, pre-call budgets and rate limits, reservations, audit and retention | `identity` | P1 baseline |
 | `extension` | plugin compatibility, permissions and signatures | `capability-registry` | Contract only |
@@ -129,12 +129,12 @@ Browser
   -> Console / Nginx :3000
        -> Platform Server :8080
             -> PostgreSQL 18 + pgvector :5432
-       -> AI Worker :8090
+            -> AI Worker :8090 [knowledge profile; private internal network only]
 ```
 
 - **Platform Server:** Java 25, Spring Boot 4.1, Spring Modulith 2.1, Spring AI 2.0, jOOQ and Flyway.
 - **Console:** Node.js 24, React 19.2, strict TypeScript, Vite 8, TanStack Query and i18next.
-- **AI Worker:** Python 3.14, FastAPI and Pydantic. It is stateless and owns no source-of-truth business data.
+- **AI Worker:** Python 3.14, FastAPI and Pydantic. It is stateless, owns no source-of-truth business data, has no host/browser route, and runs only on the private Knowledge network.
 - **Default data layer:** PostgreSQL 18 with pgvector. Optional infrastructure must not become a hidden requirement.
 
 ## Release and run truth

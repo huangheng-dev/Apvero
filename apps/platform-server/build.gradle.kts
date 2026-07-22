@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":modules:identity"))
     implementation(project(":modules:governance"))
     implementation(project(":modules:capability-registry"))
+    implementation(project(":modules:knowledge"))
     implementation(project(":modules:release"))
     implementation(project(":modules:runtime"))
 

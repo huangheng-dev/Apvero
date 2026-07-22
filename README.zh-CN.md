@@ -66,7 +66,8 @@ docker compose -f deploy/compose/compose.yaml up --build
 - 控制台：<http://localhost:3000>
 - 平台 API：<http://localhost:8080/api/v1/platform>
 - 健康检查：<http://localhost:8080/actuator/health>
-- AI Worker：<http://localhost:8090/health>
+
+AI Worker 没有宿主机端口或浏览器路由。它只随 `knowledge` Compose Profile 启动，并且只能由 Platform Server 通过私有 `knowledge-internal` 网络访问。
 
 详细说明参见[中文快速开始](docs/zh-CN/quick-start.md)。
 

@@ -66,6 +66,8 @@ P1 已在 P2 成为当前阶段前验收关闭。其控制继续作为所有 P2 
 
 ADR-0006 已批准。P2.0 获批的兼容规则、公开 API、Schema 与内部 Worker 基线记录在 [`p2-contract-baseline.md`](p2-contract-baseline.md)。这些 P2 契约在对应实现切片通过验证前，继续明确保持 `contract-only`。
 
+P2.1 正在实施。P2.1a 建立物理 Knowledge 模块、默认拒绝的启用与 Health、Worker 私有部署边界，以及版本化 Parser 候选语料/决策；它不会把 Knowledge API 或产品页面标记为真实可用。
+
 业务链路：
 
 ```text

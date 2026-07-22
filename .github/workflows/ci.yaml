@@ -52,7 +52,8 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --all-groups
       - run: uv run pytest -q
-      - run: uv run ruff check src tests
+      - run: uv run ruff check src tests benchmarks
+      - run: uv run pip-audit
 
   contracts:
     runs-on: ubuntu-latest
@@ -69,3 +70,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: docker compose -f deploy/compose/compose.yaml config --quiet
+      - run: docker compose --profile knowledge -f deploy/compose/compose.yaml config --quiet
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build -f apps/platform-server/Dockerfile -t apvero/platform-server:ci .
+      - run: docker build -f apps/ai-worker/Dockerfile -t apvero/ai-worker:ci .

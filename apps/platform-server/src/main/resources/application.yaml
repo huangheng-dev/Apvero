@@ -39,3 +39,6 @@ apvero:
   providers:
     real-enabled: ${APVERO_REAL_PROVIDER_ENABLED:false}
     allow-private-endpoints: ${APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS:false}
+  knowledge:
+    enabled: ${APVERO_KNOWLEDGE_ENABLED:false}
+    worker-base-uri: ${APVERO_KNOWLEDGE_WORKER_BASE_URI:http://ai-worker:8090}

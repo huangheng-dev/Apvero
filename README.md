@@ -66,7 +66,8 @@ Then open:
 - Console: <http://localhost:3000>
 - Platform API: <http://localhost:8080/api/v1/platform>
 - Health: <http://localhost:8080/actuator/health>
-- AI worker health: <http://localhost:8090/health>
+
+The AI worker has no host port or browser route. It starts only with the `knowledge` Compose profile and is reachable exclusively from the Platform Server on the private `knowledge-internal` network.
 
 See [English quick start](docs/en/quick-start.md) or [中文快速开始](docs/zh-CN/quick-start.md).
 

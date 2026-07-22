@@ -4,6 +4,7 @@ import io.apvero.platform.application.ApplicationNotFoundException;
 import io.apvero.platform.release.ReleaseNotFoundException;
 import io.apvero.platform.governance.BudgetExceededException;
 import io.apvero.platform.governance.RateLimitExceededException;
+import io.apvero.platform.knowledge.KnowledgeDisabledException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -41,6 +42,14 @@ class PlatformExceptionHandler {
     @ExceptionHandler(RateLimitExceededException.class)
     ProblemDetail rateLimitExceeded(RateLimitExceededException exception) {
         return problem(HttpStatus.TOO_MANY_REQUESTS, "APVERO_RATE_LIMIT_EXCEEDED", exception.getMessage());
+    }
+
+    @ExceptionHandler(KnowledgeDisabledException.class)
+    ProblemDetail knowledgeDisabled(KnowledgeDisabledException exception) {
+        return problem(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                KnowledgeDisabledException.CODE,
+                KnowledgeDisabledException.CODE);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -51,7 +51,7 @@ The Java control plane owns authentication, authorization, source fetching, SSRF
 
 Source ingestion and index construction use separate persisted lifecycles. A P2.1 ingestion job ends after deterministic parsing/chunking; P2.2 owns `EMBEDDING`, `INDEXING`, and `VALIDATING` through `KnowledgeIndexBuildStatus`. Worker chunk offsets are zero-based Unicode code-point offsets into normalized document text with a half-open `[startOffset, endOffset)` interval; page, paragraph, and line anchors are one-based.
 
-The current P1 Compose and Nginx configuration still exposes the legacy worker service on the host and through a general `/worker/` proxy. Before P2.1 enables the parser operation, implementation must remove that general proxy and host-level business endpoint exposure; only health may remain externally observable. The P2 internal contract must never be reachable through the Console origin.
+P2.1a removed the legacy worker host port and general `/worker/` proxy. The worker now starts only with the `knowledge` profile on a private internal network; even health is not exposed through the host or Console origin. The parser operation remains contract-only and disabled.
 
 ## Implementation order
 

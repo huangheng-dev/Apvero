@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "profile": "apvero-parser-candidate-benchmark@1.0.0",
+  "purpose": "Small deterministic smoke corpus; it does not define production limits.",
+  "cases": [
+    {"id": "text-unicode", "mediaType": "text/plain", "fixture": "text/unicode.txt", "expected": "accept", "expectedOutputDigest": "sha256:3c1c3393c3ea29fb4aaf497651c86360896baaf6fcf8cac628411cd4cbceca39"},
+    {"id": "markdown-structure", "mediaType": "text/markdown", "fixture": "markdown/structure.md", "expected": "accept", "expectedOutputDigest": "sha256:de36c38c302374840467d03fd0b2f21fe43208fbf719f87cd6992f012b7198b1"},
+    {"id": "html-active-content", "mediaType": "text/html", "fixture": "html/active-content.html", "expected": "accept-with-active-content-removed", "expectedOutputDigest": "sha256:af8ee771f8128cf0f5df68f69d772f46d633c2c4dc337fb122ad068c579a6d54"},
+    {"id": "pdf-one-page", "mediaType": "application/pdf", "fixture": "generated:minimal-pdf", "expected": "accept", "expectedOutputDigest": "sha256:180ed8a0de5b1154b30860edbe31db6b225ab45b1a7ee5803fd0be7968901cca"},
+    {"id": "docx-headings", "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "fixture": "generated:minimal-docx", "expected": "accept", "expectedOutputDigest": "sha256:c43f70f81bae94ea32f227129c52ac152f9a1e6ccea9aca8ef1be84dfbcf905c"}
+  ],
+  "requiredAdversarialFamiliesBeforeEndpointEnablement": [
+    "invalid-utf8",
+    "encrypted-pdf",
+    "malformed-pdf",
+    "page-limit",
+    "macro-enabled-office",
+    "malformed-zip-and-xml",
+    "archive-expansion-limit",
+    "processing-timeout",
+    "output-size-limit"
+  ]
+}
