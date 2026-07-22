@@ -46,6 +46,8 @@ apvero:
   knowledge:
     enabled: ${APVERO_KNOWLEDGE_ENABLED:false}
     worker-base-uri: ${APVERO_KNOWLEDGE_WORKER_BASE_URI:http://ai-worker:8090}
+    worker-read-timeout: ${APVERO_KNOWLEDGE_WORKER_READ_TIMEOUT:15s}
+    max-worker-response-bytes: ${APVERO_KNOWLEDGE_MAX_WORKER_RESPONSE_BYTES:20971520}
     max-inline-characters: ${APVERO_KNOWLEDGE_MAX_INLINE_CHARACTERS:5242880}
     max-snapshot-bytes: ${APVERO_KNOWLEDGE_MAX_SNAPSHOT_BYTES:5242880}
     max-docx-entries: ${APVERO_KNOWLEDGE_MAX_DOCX_ENTRIES:2048}

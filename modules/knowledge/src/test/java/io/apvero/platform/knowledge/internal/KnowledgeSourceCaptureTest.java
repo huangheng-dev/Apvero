@@ -8,6 +8,7 @@ import io.apvero.platform.knowledge.KnowledgeSource;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
+import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.Test;
 
 class KnowledgeSourceCaptureTest {
     private final KnowledgeSourceCapture capture = new KnowledgeSourceCapture(
-            new KnowledgeProperties(true, URI.create("http://ai-worker:8090"), 8, 1_024, 8, 4_096));
+            new KnowledgeProperties(
+                    true, URI.create("http://ai-worker:8090"), Duration.ofSeconds(15), 20_971_520,
+                    8, 1_024, 8, 4_096));
 
     @Test
     void capturesExactUtf8BytesAndUsesCodePointLimits() {

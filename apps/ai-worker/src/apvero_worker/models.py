@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -58,3 +58,61 @@ class ExactMatchResponse(BaseModel):
     passed: int
     total: int
     results: list[EvaluationResult]
+
+
+def _to_camel(value: str) -> str:
+    head, *tail = value.split("_")
+    return head + "".join(part.capitalize() for part in tail)
+
+
+class WorkerContractModel(BaseModel):
+    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
+
+
+class SourceAnchors(WorkerContractModel):
+    page: int | None = Field(default=None, ge=1)
+    heading: str | None = Field(default=None, min_length=1, max_length=1_000)
+    paragraph: int | None = Field(default=None, ge=1)
+    line_start: int | None = Field(default=None, ge=1)
+    line_end: int | None = Field(default=None, ge=1)
+
+
+class ProcessedChunk(WorkerContractModel):
+    ordinal: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=20_000)
+    content_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=1)
+    anchors: SourceAnchors
+
+
+class ProcessedDocument(WorkerContractModel):
+    ordinal: int = Field(ge=0)
+    title: str | None = Field(default=None, min_length=1, max_length=1_000)
+    content_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    chunks: list[ProcessedChunk] = Field(min_length=1, max_length=100_000)
+
+
+class ProcessingWarning(WorkerContractModel):
+    code: str
+    location: str | None = Field(default=None, max_length=500)
+
+
+class ProcessedDocumentBatch(WorkerContractModel):
+    request_id: str
+    source_revision_id: str
+    content_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    processing_profile: str
+    parser_version: str
+    chunker_version: str
+    documents: list[ProcessedDocument] = Field(min_length=1, max_length=10_000)
+    warnings: list[ProcessingWarning] = Field(default_factory=list, max_length=1_000)
+
+
+class WorkerProblem(WorkerContractModel):
+    type: str
+    title: str
+    status: int = Field(ge=400, le=599)
+    code: str
+    retryable: bool
+    request_id: str

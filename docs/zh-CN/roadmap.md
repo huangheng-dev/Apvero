@@ -66,7 +66,7 @@ P1 已在 P2 成为当前阶段前验收关闭。其控制继续作为所有 P2 
 
 ADR-0006 已批准。P2.0 获批的兼容规则、公开 API、Schema 与内部 Worker 基线记录在 [`p2-contract-baseline.md`](p2-contract-baseline.md)。这些 P2 契约在对应实现切片通过验证前，继续明确保持 `contract-only`。
 
-P2.1 正在实施。P2.1a 建立物理 Knowledge 模块、默认拒绝的启用与 Health、Worker 私有部署边界，以及版本化 Parser 候选语料/决策。P2.1b 增加六张带 Scope 的摄取表、由数据库强制执行的不可变血缘，以及必须接收 Tenant/Workspace Scope 的 Repository。P2.1c 闭合 Base 与非 Web Source 的编写流程，包括不可变 Revision、排队 Job、Audit、No-op 识别、内容读取和 Tombstone。P2.1d 已形成实现候选，覆盖受保护的网页 Source 调度、固定地址 SSRF 防护、有界采集、安全元数据持久化和 Changed/Unchanged 同步。Knowledge 仍默认关闭；自动耐久任务执行、Worker 处理、检索、产品 Live 激活及 P2 Exit Gate 仍属于后续工作。
+P2.1 正在实施。P2.1a 建立物理 Knowledge 模块、默认拒绝的启用与 Health、Worker 私有部署边界，以及版本化 Parser 候选语料/决策。P2.1b 增加六张带 Scope 的摄取表、由数据库强制执行的不可变血缘，以及必须接收 Tenant/Workspace Scope 的 Repository。P2.1c 闭合 Base 与非 Web Source 的编写流程，包括不可变 Revision、排队 Job、Audit、No-op 识别、内容读取和 Tombstone。P2.1d 已交付受保护的网页 Source 调度、固定地址 SSRF 防护、有界采集、安全元数据持久化和 Changed/Unchanged 同步。P2.1e 已形成实现候选，覆盖五种格式的有界 Worker 解析/切块契约、严格的 Java 响应校验，以及不可变 Document 与 Chunk 的事务化幂等持久化。Knowledge 仍默认关闭；自动耐久任务执行、检索、产品 Live 激活及 P2 Exit Gate 仍属于后续工作。
 
 业务链路：
 

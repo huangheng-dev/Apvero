@@ -201,6 +201,14 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     }
 
     @Override
+    public Optional<SourceRevisionRow> lockRevision(WorkspaceScope scope, UUID revisionId) {
+        return sql.fetchOptional(REVISION_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and id = ? for update",
+                        scope.tenantId(), scope.workspaceId(), revisionId)
+                .map(this::mapRevision);
+    }
+
+    @Override
     public Optional<SourceRevisionRow> findLatestRevision(WorkspaceScope scope, UUID sourceId) {
         return sql.fetchOptional(REVISION_SELECT
                         + " where tenant_id = ? and workspace_id = ? and source_id = ?"
@@ -240,6 +248,15 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     }
 
     @Override
+    public List<DocumentRow> listDocuments(WorkspaceScope scope, UUID sourceRevisionId) {
+        return sql.fetch(DOCUMENT_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and source_revision_id = ?"
+                        + " order by ordinal, id",
+                        scope.tenantId(), scope.workspaceId(), sourceRevisionId)
+                .map(this::mapDocument);
+    }
+
+    @Override
     public ChunkRow insertChunk(WorkspaceScope scope, ChunkRow row) {
         requireScope(scope, row.tenantId(), row.workspaceId());
         sql.execute("""
@@ -259,6 +276,15 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     public Optional<ChunkRow> findChunk(WorkspaceScope scope, UUID chunkId) {
         return sql.fetchOptional(CHUNK_SELECT + " where tenant_id = ? and workspace_id = ? and id = ?",
                         scope.tenantId(), scope.workspaceId(), chunkId)
+                .map(this::mapChunk);
+    }
+
+    @Override
+    public List<ChunkRow> listChunks(WorkspaceScope scope, UUID sourceRevisionId) {
+        return sql.fetch(CHUNK_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and source_revision_id = ?"
+                        + " order by document_id, ordinal, id",
+                        scope.tenantId(), scope.workspaceId(), sourceRevisionId)
                 .map(this::mapChunk);
     }
 
