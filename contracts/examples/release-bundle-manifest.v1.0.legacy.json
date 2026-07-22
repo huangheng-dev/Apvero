@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "modelRouteVersion": "local-deterministic@1.0.0",
+  "promptVersion": "prompt@1.0.0",
+  "outputSchemaVersion": "none@1",
+  "knowledgeIndexVersions": [],
+  "capabilityVersions": [],
+  "policyVersions": [],
+  "memoryPolicyVersion": "none@1",
+  "evaluationReportVersion": "not-evaluated@1",
+  "runtimeParameters": {
+    "configurationSource": "application-draft"
+  }
+}

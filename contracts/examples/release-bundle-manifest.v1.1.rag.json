@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.1",
+  "runtimeMode": "RAG",
+  "modelRouteVersion": "answer-route@1.2.0",
+  "promptVersion": "grounded-answer@2.1.0",
+  "outputSchemaVersion": "grounded-answer@1.0.0",
+  "knowledgeBindings": [
+    {
+      "indexVersion": "procurement-index@1.0.0",
+      "retrievalPolicyVersion": "balanced-retrieval@1.0.0"
+    }
+  ],
+  "capabilityVersions": [],
+  "policyVersions": ["baseline-safety@1.0.0"],
+  "memoryPolicyVersion": "none@1.0.0",
+  "evaluationReportVersion": "not-evaluated@1.0.0",
+  "runtimeParameters": {
+    "temperature": 0,
+    "maxOutputTokens": 1024
+  }
+}

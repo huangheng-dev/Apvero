@@ -62,7 +62,7 @@ jobs:
         with:
           node-version: "24"
       - run: node -e "for (const f of require('fs').globSync('contracts/**/*.json')) JSON.parse(require('fs').readFileSync(f, 'utf8'));"
-      - run: npx --yes @redocly/cli@2.13.0 lint contracts/openapi/platform-api.yaml
+      - run: npx --yes @redocly/cli@2.13.0 lint contracts/openapi/platform-api.yaml contracts/openapi/ai-worker-internal.v1.yaml
 
   compose-config:
     runs-on: ubuntu-latest

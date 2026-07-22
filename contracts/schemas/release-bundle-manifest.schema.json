@@ -1,7 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apvero.dev/release-bundle-manifest/1.0.0",
-  "title": "Apvero Release Bundle Manifest",
+  "title": "Apvero Release Bundle Manifest 1.0 (legacy compatibility)",
+  "description": "Historical CHAT manifest contract. It remains readable during Apvero 0.x and includes the integer-version shorthand and runtime metadata emitted by the P1 implementation. New RAG releases must use manifest 1.1.",
+  "x-apvero-contract-status": "legacy-live",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,17 +25,30 @@
     "outputSchemaVersion": { "$ref": "#/$defs/versionReference" },
     "knowledgeIndexVersions": { "type": "array", "items": { "$ref": "#/$defs/versionReference" }, "uniqueItems": true },
     "capabilityVersions": { "type": "array", "items": { "$ref": "#/$defs/versionReference" }, "uniqueItems": true },
-    "policyVersions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/versionReference" }, "uniqueItems": true },
+    "policyVersions": { "type": "array", "items": { "$ref": "#/$defs/versionReference" }, "uniqueItems": true },
     "memoryPolicyVersion": { "$ref": "#/$defs/versionReference" },
     "evaluationReportVersion": { "$ref": "#/$defs/versionReference" },
     "runtimeParameters": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["temperature", "maxOutputTokens"],
-      "properties": {
-        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
-        "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 100000 }
-      }
+      "description": "Legacy 1.0 accepted either explicit runtime values or P1 generated configuration-source metadata.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperature", "maxOutputTokens"],
+          "properties": {
+            "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+            "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 200000 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["configurationSource"],
+          "properties": {
+            "configurationSource": { "const": "application-draft" }
+          }
+        }
+      ]
     }
   },
   "$defs": {
@@ -41,7 +56,8 @@
       "type": "string",
       "minLength": 3,
       "maxLength": 200,
-      "pattern": "^(?!.*(?:^|[@:/-])latest(?:$|[@:/-])).+@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$"
+      "description": "Legacy 1.0 permits the P1 integer shorthand (for example none@1) as well as semantic versions.",
+      "pattern": "^(?!.*(?:^|[@:/-])latest(?:$|[@:/-])).+@(?:[0-9]+|[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?)$"
     }
   }
 }

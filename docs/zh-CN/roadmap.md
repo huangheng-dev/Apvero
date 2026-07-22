@@ -11,8 +11,8 @@
 ```mermaid
 flowchart LR
     P0["P0 工程基础<br/>已完成"]
-    P1["P1 安全执行<br/>当前阶段"]
-    P2["P2 Knowledge / RAG"]
+    P1["P1 安全执行<br/>已完成"]
+    P2["P2 Knowledge / RAG<br/>当前阶段"]
     P3["P3 Tool / MCP"]
     P4["P4 Agent 运行时"]
     P5["P5 评测 / 反馈"]
@@ -25,8 +25,8 @@ flowchart LR
 | 阶段 | 交付结果 | 状态 |
 |---|---|---|
 | P0 | 可约束的架构与可运行仓库基线 | 已完成 |
-| P1 | 安全、可归因、受成本控制的模型执行 | 进行中 |
-| P2 | 不可变、租户隔离、带引用的 Knowledge/RAG | 规划 |
+| P1 | 安全、可归因、受成本控制的模型执行 | 已完成 |
+| P2 | 不可变、租户隔离、带引用的 Knowledge/RAG | 进行中 |
 | P3 | 类型化、受权限控制的 Tool/MCP 执行 | 规划 |
 | P4 | 有边界、可观测的 Agent Application 运行时 | 规划 |
 | P5 | 以证据驱动的评测、反馈与发布门禁 | 规划 |
@@ -56,21 +56,15 @@ Secret Reference -> Provider -> Model -> Route -> Prompt Version
 -> Application Draft -> Preview -> 不可变 Release -> Run -> Usage & Cost
 ```
 
-已经具备：有作用域的 API Credential、Secret Reference、版本化 Provider/模型/路由/Prompt、Application 草稿绑定、不可变预览与生产发布包、确定性执行、显式启用的 Spring AI 执行、Run 账本和用量汇总。
+已经交付：有作用域的 API Credential、Secret Reference、版本化 Provider/模型/路由/Prompt、Application 草稿绑定、不可变预览与生产发布包、确定性与显式启用的 Spring AI 执行、调用前限流和预算准入、类型化审计、非计费就绪状态、Micrometer 指标、可配置留存/脱敏、PostgreSQL 隔离/失败验证、Run 账本以及真实用量/成本证据。
 
-仍需收口：
-
-- 在产生费用的模型调用前执行限流和预算判断；
-- 为凭证和配置变更记录类型化审计事件；
-- 在不产生模型费用的情况下展示 Provider 就绪状态；
-- 发布请求量、结果、延迟、Token、成本和路由 Micrometer 指标；
-- 定义可配置的数据留存与脱敏行为；
-- 增加 PostgreSQL 迁移、隔离和失败路径集成测试；
-- 将 Audit、Budgets、System Health 从演示/混合数据升级为真实数据。
+P1 已在 P2 成为当前阶段前验收关闭。其控制继续作为所有 P2 付费 Embedding 与生成调用的强制依赖。
 
 退出条件：未认证、跨工作区、超限和超预算请求全部默认拒绝；Secret 明文不落库、不返回；每次变更和运行都具备身份、Trace、标准化结果、用量与成本证据。
 
 ## P2——Knowledge 与可信 RAG
+
+ADR-0006 已批准。P2.0 获批的兼容规则、公开 API、Schema 与内部 Worker 基线记录在 [`p2-contract-baseline.md`](p2-contract-baseline.md)。这些 P2 契约在对应实现切片通过验证前，继续明确保持 `contract-only`。
 
 业务链路：
 

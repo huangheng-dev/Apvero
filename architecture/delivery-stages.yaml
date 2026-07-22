@@ -1,7 +1,7 @@
 schemaVersion: 1
 project: Apvero
 currentStage: P2
-lastReviewed: 2026-07-21
+lastReviewed: 2026-07-22
 
 statusValues: [completed, in-progress, planned]
 
@@ -84,6 +84,31 @@ stages:
     objective: Turn source documents into immutable, tenant-isolated knowledge index versions that produce cited answers.
     primaryModules: [knowledge, capability-registry, application, release, runtime]
     workflow: source -> ingest -> parse -> chunk -> embed -> index-version -> retrieve-test -> bind -> release -> cited-answer
+    milestones:
+      - id: P2.0
+        name: Architecture and contract baseline
+        status: completed
+        evidence:
+          - docs/adr/0006-p2-grounded-knowledge-rag-baseline.md
+          - docs/en/p2-contract-baseline.md
+          - docs/zh-CN/p2-contract-baseline.md
+          - contracts/schemas/release-bundle-manifest.v1.1.schema.json
+          - contracts/schemas/grounded-answer.v1.schema.json
+          - contracts/schemas/citation.v1.schema.json
+          - contracts/openapi/platform-api.yaml
+          - contracts/openapi/ai-worker-internal.v1.yaml
+      - id: P2.1
+        name: Durable ingestion spine
+        status: planned
+      - id: P2.2
+        name: Immutable index and Retrieval Lab
+        status: planned
+      - id: P2.3
+        name: Application to cited Run closure
+        status: planned
+      - id: P2.4
+        name: Product and operations gate
+        status: planned
     deliverables:
       - file-web-and-markdown-source-baseline
       - persisted-ingestion-job-and-lineage

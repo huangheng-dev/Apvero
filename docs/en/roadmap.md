@@ -11,8 +11,8 @@ The machine-readable authority is [`architecture/delivery-stages.yaml`](../../ar
 ```mermaid
 flowchart LR
     P0["P0 Foundation<br/>completed"]
-    P1["P1 Secure execution<br/>current"]
-    P2["P2 Knowledge / RAG"]
+    P1["P1 Secure execution<br/>completed"]
+    P2["P2 Knowledge / RAG<br/>current"]
     P3["P3 Tools / MCP"]
     P4["P4 Agent runtime"]
     P5["P5 Evaluation / Feedback"]
@@ -25,8 +25,8 @@ flowchart LR
 | Stage | Outcome | Status |
 |---|---|---|
 | P0 | Enforceable architecture and runnable repository baseline | Completed |
-| P1 | Safe, attributable and cost-controlled model execution | In progress |
-| P2 | Immutable tenant-isolated knowledge with cited RAG answers | Planned |
+| P1 | Safe, attributable and cost-controlled model execution | Completed |
+| P2 | Immutable tenant-isolated knowledge with cited RAG answers | In progress |
 | P3 | Typed and permissioned Tool/MCP execution | Planned |
 | P4 | Bounded, observable Agent Application runtime | Planned |
 | P5 | Evidence-driven evaluation, feedback and release gates | Planned |
@@ -56,21 +56,15 @@ Secret Reference -> Provider -> Model -> Route -> Prompt Version
 -> Application Draft -> Preview -> Immutable Release -> Run -> Usage & Cost
 ```
 
-Already present: scoped API credentials, Secret References, versioned providers/models/routes/prompts, Application draft binding, immutable preview and production bundles, deterministic execution, opt-in Spring AI execution, run ledger and usage totals.
+Delivered: scoped API credentials, Secret References, versioned providers/models/routes/prompts, Application draft binding, immutable preview and production bundles, deterministic and opt-in Spring AI execution, pre-call rate and budget admission, typed audit, non-billable readiness, Micrometer metrics, configurable retention/masking, PostgreSQL isolation/failure verification, run ledger and live usage/cost evidence.
 
-Remaining closure work:
-
-- enforce rate limits and budgets before billable calls;
-- record typed audit events for credentials and configuration mutations;
-- expose provider readiness without billable health probes;
-- publish Micrometer request, outcome, latency, token, cost and route metrics;
-- define configurable retention and masking behavior;
-- add PostgreSQL migration, isolation and failure-path integration tests;
-- move Audit, Budgets and System Health from demo/mixed projections to live data.
+P1 was accepted and closed before P2 became current. Its controls remain mandatory dependencies for every billable P2 embedding and generation call.
 
 Exit: unauthorized, cross-workspace, over-limit and over-budget calls fail closed; secrets never appear in persistence or responses; every mutation and run has identity, trace, normalized outcome, usage and cost evidence.
 
 ## P2 — Knowledge and grounded RAG
+
+ADR-0006 is accepted. The approved P2.0 compatibility, public API, schema, and internal worker baseline is documented in [`p2-contract-baseline.md`](p2-contract-baseline.md). These P2 contracts remain explicitly `contract-only` until their implementation slices pass verification.
 
 Workflow:
 
