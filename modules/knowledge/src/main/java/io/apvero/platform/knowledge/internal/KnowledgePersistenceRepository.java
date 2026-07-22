@@ -10,11 +10,14 @@ import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.SourceR
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 interface KnowledgePersistenceRepository {
     BaseRow insertBase(WorkspaceScope scope, BaseRow row);
 
     Optional<BaseRow> findBase(WorkspaceScope scope, UUID baseId);
+
+    Optional<BaseRow> findBaseBySlug(WorkspaceScope scope, String slug);
 
     List<BaseRow> listBases(WorkspaceScope scope);
 
@@ -22,9 +25,32 @@ interface KnowledgePersistenceRepository {
 
     Optional<SourceRow> findSource(WorkspaceScope scope, UUID sourceId);
 
+    Optional<SourceRow> lockSource(WorkspaceScope scope, UUID sourceId);
+
+    List<SourceRow> listSources(WorkspaceScope scope, UUID knowledgeBaseId);
+
+    Optional<SourceRow> updateSourceRevision(
+            WorkspaceScope scope,
+            UUID sourceId,
+            long expectedVersion,
+            int latestRevisionNumber,
+            UUID latestRevisionId,
+            OffsetDateTime updatedAt);
+
+    Optional<SourceRow> tombstoneSource(
+            WorkspaceScope scope,
+            UUID sourceId,
+            long expectedVersion,
+            OffsetDateTime tombstonedAt,
+            String tombstonedBy);
+
     SourceRevisionRow insertRevision(WorkspaceScope scope, SourceRevisionRow row);
 
     Optional<SourceRevisionRow> findRevision(WorkspaceScope scope, UUID revisionId);
+
+    Optional<SourceRevisionRow> findLatestRevision(WorkspaceScope scope, UUID sourceId);
+
+    List<SourceRevisionRow> listRevisions(WorkspaceScope scope, UUID sourceId);
 
     DocumentRow insertDocument(WorkspaceScope scope, DocumentRow row);
 

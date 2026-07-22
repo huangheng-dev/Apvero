@@ -90,6 +90,13 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     }
 
     @Override
+    public Optional<BaseRow> findBaseBySlug(WorkspaceScope scope, String slug) {
+        return sql.fetchOptional(BASE_SELECT + " where tenant_id = ? and workspace_id = ? and slug = ?",
+                        scope.tenantId(), scope.workspaceId(), slug)
+                .map(this::mapBase);
+    }
+
+    @Override
     public List<BaseRow> listBases(WorkspaceScope scope) {
         return sql.fetch(BASE_SELECT + " where tenant_id = ? and workspace_id = ? order by updated_at desc, id",
                         scope.tenantId(), scope.workspaceId())
@@ -120,6 +127,57 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     }
 
     @Override
+    public Optional<SourceRow> lockSource(WorkspaceScope scope, UUID sourceId) {
+        return sql.fetchOptional(SOURCE_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and id = ? for update",
+                        scope.tenantId(), scope.workspaceId(), sourceId)
+                .map(this::mapSource);
+    }
+
+    @Override
+    public List<SourceRow> listSources(WorkspaceScope scope, UUID knowledgeBaseId) {
+        return sql.fetch(SOURCE_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and knowledge_base_id = ?"
+                        + " order by updated_at desc, id",
+                        scope.tenantId(), scope.workspaceId(), knowledgeBaseId)
+                .map(this::mapSource);
+    }
+
+    @Override
+    public Optional<SourceRow> updateSourceRevision(
+            WorkspaceScope scope,
+            UUID sourceId,
+            long expectedVersion,
+            int latestRevisionNumber,
+            UUID latestRevisionId,
+            OffsetDateTime updatedAt) {
+        int changed = sql.execute("""
+                update knowledge_source
+                set latest_revision_number = ?, latest_revision_id = ?, version = version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and version = ? and status = 'ACTIVE'
+                """, latestRevisionNumber, latestRevisionId, timestamp(updatedAt), scope.tenantId(),
+                scope.workspaceId(), sourceId, expectedVersion);
+        return changed == 1 ? findSource(scope, sourceId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<SourceRow> tombstoneSource(
+            WorkspaceScope scope,
+            UUID sourceId,
+            long expectedVersion,
+            OffsetDateTime tombstonedAt,
+            String tombstonedBy) {
+        int changed = sql.execute("""
+                update knowledge_source
+                set status = 'TOMBSTONED', tombstoned_at = ?, tombstoned_by = ?,
+                    version = version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and version = ? and status = 'ACTIVE'
+                """, timestamp(tombstonedAt), tombstonedBy, timestamp(tombstonedAt), scope.tenantId(),
+                scope.workspaceId(), sourceId, expectedVersion);
+        return changed == 1 ? findSource(scope, sourceId) : Optional.empty();
+    }
+
+    @Override
     public SourceRevisionRow insertRevision(WorkspaceScope scope, SourceRevisionRow row) {
         requireScope(scope, row.tenantId(), row.workspaceId());
         sql.execute("""
@@ -139,6 +197,24 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     public Optional<SourceRevisionRow> findRevision(WorkspaceScope scope, UUID revisionId) {
         return sql.fetchOptional(REVISION_SELECT + " where tenant_id = ? and workspace_id = ? and id = ?",
                         scope.tenantId(), scope.workspaceId(), revisionId)
+                .map(this::mapRevision);
+    }
+
+    @Override
+    public Optional<SourceRevisionRow> findLatestRevision(WorkspaceScope scope, UUID sourceId) {
+        return sql.fetchOptional(REVISION_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and source_id = ?"
+                        + " order by revision desc limit 1",
+                        scope.tenantId(), scope.workspaceId(), sourceId)
+                .map(this::mapRevision);
+    }
+
+    @Override
+    public List<SourceRevisionRow> listRevisions(WorkspaceScope scope, UUID sourceId) {
+        return sql.fetch(REVISION_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and source_id = ?"
+                        + " order by revision desc, id",
+                        scope.tenantId(), scope.workspaceId(), sourceId)
                 .map(this::mapRevision);
     }
 

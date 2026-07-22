@@ -66,7 +66,7 @@ Exit: unauthorized, cross-workspace, over-limit and over-budget calls fail close
 
 ADR-0006 is accepted. The approved P2.0 compatibility, public API, schema, and internal worker baseline is documented in [`p2-contract-baseline.md`](p2-contract-baseline.md). These P2 contracts remain explicitly `contract-only` until their implementation slices pass verification.
 
-P2.1 is in progress. P2.1a establishes the physical Knowledge module, fail-closed enablement and health, private Worker deployment boundary, and the versioned parser-candidate corpus/decision. P2.1b adds the six scoped ingestion tables, database-enforced immutable lineage, and repositories that require tenant/workspace scope. Neither slice makes Knowledge APIs or the product page live.
+P2.1 is in progress. P2.1a establishes the physical Knowledge module, fail-closed enablement and health, private Worker deployment boundary, and the versioned parser-candidate corpus/decision. P2.1b adds the six scoped ingestion tables, database-enforced immutable lineage, and repositories that require tenant/workspace scope. P2.1c closes Base and non-web Source authoring through immutable Revision, queued Job, audit, no-op detection, content read, and tombstone behavior. Knowledge remains disabled by default; web capture, processing, retrieval, live APIs, and the product page still await later checkpoints and the P2 exit gates.
 
 Workflow:
 

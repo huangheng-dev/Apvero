@@ -1,6 +1,10 @@
 spring:
   application:
     name: apvero-platform-server
+  servlet:
+    multipart:
+      max-file-size: ${APVERO_KNOWLEDGE_MAX_SNAPSHOT_BYTES:5242880B}
+      max-request-size: ${APVERO_KNOWLEDGE_MAX_MULTIPART_REQUEST_BYTES:6291456B}
   datasource:
     url: ${APVERO_DB_URL:jdbc:postgresql://localhost:5432/apvero}
     username: ${APVERO_DB_USER:apvero}
@@ -42,3 +46,7 @@ apvero:
   knowledge:
     enabled: ${APVERO_KNOWLEDGE_ENABLED:false}
     worker-base-uri: ${APVERO_KNOWLEDGE_WORKER_BASE_URI:http://ai-worker:8090}
+    max-inline-characters: ${APVERO_KNOWLEDGE_MAX_INLINE_CHARACTERS:5242880}
+    max-snapshot-bytes: ${APVERO_KNOWLEDGE_MAX_SNAPSHOT_BYTES:5242880}
+    max-docx-entries: ${APVERO_KNOWLEDGE_MAX_DOCX_ENTRIES:2048}
+    max-docx-expanded-bytes: ${APVERO_KNOWLEDGE_MAX_DOCX_EXPANDED_BYTES:20971520}

@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":modules:governance"))
     api(libs.spring.modulith.api)
     implementation(libs.spring.boot.actuator)
+    implementation(libs.spring.boot.webmvc)
     implementation(libs.spring.boot.jooq)
     implementation("com.fasterxml.jackson.core:jackson-annotations")
 

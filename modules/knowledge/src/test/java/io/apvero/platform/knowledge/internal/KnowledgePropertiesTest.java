@@ -9,15 +9,19 @@ class KnowledgePropertiesTest {
 
     @Test
     void rejectsWorkerUrisThatCanCarryCredentials() {
-        assertThatThrownBy(() -> new KnowledgeProperties(false, URI.create("http://user:secret@ai-worker:8090")))
+        assertThatThrownBy(() -> properties(false, URI.create("http://user:secret@ai-worker:8090")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("APVERO_KNOWLEDGE_WORKER_BASE_URI_INVALID");
     }
 
     @Test
     void rejectsNonHttpWorkerUris() {
-        assertThatThrownBy(() -> new KnowledgeProperties(false, URI.create("file:///tmp/worker")))
+        assertThatThrownBy(() -> properties(false, URI.create("file:///tmp/worker")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("APVERO_KNOWLEDGE_WORKER_BASE_URI_INVALID");
+    }
+
+    private static KnowledgeProperties properties(boolean enabled, URI workerBaseUri) {
+        return new KnowledgeProperties(enabled, workerBaseUri, 5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 }
