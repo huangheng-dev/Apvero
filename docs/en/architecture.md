@@ -115,7 +115,7 @@ Apvero
 | `runtime` | run ledger, trace identity and provider SPI | `application`, `release`, `capability-registry`, `knowledge` | Baseline |
 | `identity` | tenants, workspaces, principals, coarse API roles and hashed credentials | none | Baseline |
 | `capability-registry` | providers, models, routes and prompts; other capability metadata later | `identity`, `governance` | Baseline |
-| `knowledge` | sources, ingestion, chunks and index versions | `identity`, `capability-registry`, `governance` | P2.1a module and safety shell; APIs disabled |
+| `knowledge` | sources, ingestion, chunks and index versions | `identity`, `capability-registry`, `governance` | P2.1b scoped immutable persistence; APIs disabled |
 | `evaluation` | datasets, evaluation runs, experiments and gates | `application`, `release`, `runtime` | Planned |
 | `governance` | secret references, pre-call budgets and rate limits, reservations, audit and retention | `identity` | P1 baseline |
 | `extension` | plugin compatibility, permissions and signatures | `capability-registry` | Contract only |
