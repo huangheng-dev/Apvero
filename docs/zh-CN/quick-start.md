@@ -41,8 +41,16 @@ docker compose -f deploy/compose/compose.yaml up --build
 | 控制台 | <http://localhost:3000> |
 | 平台信息 | <http://localhost:8080/api/v1/platform> |
 | 平台健康检查 | <http://localhost:8080/actuator/health> |
-| Worker 健康检查 | <http://localhost:8090/health> |
-| Worker OpenAPI | <http://localhost:8090/docs> |
+
+默认 Profile 有意不启动 AI Worker。它没有宿主机端口、Console 代理或公开 OpenAPI 页面。P2 实施验证可以使用 `docker compose --profile knowledge ...` 启动它；此时也只有 Platform Server 能通过 `knowledge-internal` 访问其健康检查和内部契约。
+
+如果从曾经发布 `8090` 端口的旧版本升级，第一次使用新配置前先停止旧容器，避免旧端口映射因 Profile 未启用而继续存在：
+
+```bash
+docker compose --profile knowledge -f deploy/compose/compose.yaml stop ai-worker
+```
+
+明确需要 Knowledge 验证时，执行 `docker compose --profile knowledge -f deploy/compose/compose.yaml up -d --build ai-worker`，它会按仅私有网络的新配置重建 Worker。
 
 ## 停止与清空
 

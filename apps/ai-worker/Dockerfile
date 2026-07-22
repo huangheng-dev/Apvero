@@ -8,6 +8,7 @@ WORKDIR /app
 COPY apps/ai-worker/pyproject.toml ./
 COPY apps/ai-worker/src ./src
 RUN pip install --no-cache-dir .
-USER 10002
+USER 10002:10002
 EXPOSE 8090
-CMD ["uvicorn", "apvero_worker.main:app", "--host", "0.0.0.0", "--port", "8090"]
+STOPSIGNAL SIGTERM
+CMD ["uvicorn", "apvero_worker.main:app", "--host", "0.0.0.0", "--port", "8090", "--no-access-log"]

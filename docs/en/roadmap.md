@@ -66,6 +66,8 @@ Exit: unauthorized, cross-workspace, over-limit and over-budget calls fail close
 
 ADR-0006 is accepted. The approved P2.0 compatibility, public API, schema, and internal worker baseline is documented in [`p2-contract-baseline.md`](p2-contract-baseline.md). These P2 contracts remain explicitly `contract-only` until their implementation slices pass verification.
 
+P2.1 is in progress. P2.1a establishes the physical Knowledge module, fail-closed enablement and health, private Worker deployment boundary, and the versioned parser-candidate corpus/decision. It does not make Knowledge APIs or the product page live.
+
 Workflow:
 
 ```text

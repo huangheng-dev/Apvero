@@ -20,6 +20,7 @@ include(
     ":modules:identity",
     ":modules:governance",
     ":modules:capability-registry",
+    ":modules:knowledge",
     ":modules:release",
     ":modules:runtime",
 )

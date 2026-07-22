@@ -99,7 +99,7 @@ stages:
           - contracts/openapi/ai-worker-internal.v1.yaml
       - id: P2.1
         name: Durable ingestion spine
-        status: planned
+        status: in-progress
         planningEvidence:
           - docs/en/p2-1-implementation-plan.md
           - docs/zh-CN/p2-1-implementation-plan.md

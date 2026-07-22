@@ -1,0 +1,3 @@
+Apvero keeps English and 简体中文 together.
+Emoji are Unicode code points: 🧭 and 🚀.
+Offsets must use the normalized document text, not UTF-8 byte positions.

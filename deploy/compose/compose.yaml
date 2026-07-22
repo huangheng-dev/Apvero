@@ -17,6 +17,8 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks:
+      - backend
 
   platform-server:
     build:
@@ -32,6 +34,8 @@ services:
       APVERO_BOOTSTRAP_ADMIN_TOKEN: ${APVERO_BOOTSTRAP_ADMIN_TOKEN:-}
       APVERO_REAL_PROVIDER_ENABLED: ${APVERO_REAL_PROVIDER_ENABLED:-false}
       APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS: ${APVERO_ALLOW_PRIVATE_MODEL_ENDPOINTS:-false}
+      APVERO_KNOWLEDGE_ENABLED: ${APVERO_KNOWLEDGE_ENABLED:-false}
+      APVERO_KNOWLEDGE_WORKER_BASE_URI: ${APVERO_KNOWLEDGE_WORKER_BASE_URI:-http://ai-worker:8090}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     ports:
@@ -46,19 +50,31 @@ services:
       retries: 12
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - backend
+      - knowledge-internal
 
   ai-worker:
+    profiles: [knowledge]
     build:
       context: ../..
       dockerfile: apps/ai-worker/Dockerfile
-    ports:
-      - "${APVERO_BIND_ADDRESS:-127.0.0.1}:${APVERO_WORKER_PORT:-8090}:8090"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${APVERO_WORKER_MEMORY_LIMIT:-512m}
+    cpus: ${APVERO_WORKER_CPU_LIMIT:-1.0}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=2)"]
       interval: 10s
       timeout: 4s
       retries: 10
     restart: unless-stopped
+    networks:
+      - knowledge-internal
 
   console:
     build:
@@ -69,14 +85,21 @@ services:
     depends_on:
       platform-server:
         condition: service_healthy
-      ai-worker:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
       interval: 10s
       timeout: 4s
       retries: 10
     restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: apvero_backend
+  knowledge-internal:
+    name: apvero_knowledge_internal
+    internal: true
 
 volumes:
   apvero_postgres:
