@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apvero.dev/citation/1.0.0",
+  "title": "Apvero Verified Citation 1.0",
+  "description": "A citation validated against immutable retrieval evidence retained for one Run. The authorized locator is generated at read time and is never a storage path.",
+  "x-apvero-contract-status": "contract-only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "marker",
+    "indexVersion",
+    "sourceId",
+    "sourceRevisionId",
+    "documentId",
+    "chunkId",
+    "contentDigest",
+    "rank",
+    "score"
+  ],
+  "properties": {
+    "marker": { "type": "string", "pattern": "^\\[K[1-9][0-9]*\\]$" },
+    "indexVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" },
+    "sourceId": { "type": "string", "format": "uuid" },
+    "sourceRevisionId": { "type": "string", "format": "uuid" },
+    "documentId": { "type": "string", "format": "uuid" },
+    "chunkId": { "type": "string", "format": "uuid" },
+    "contentDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "rank": { "type": "integer", "minimum": 1 },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "sourceTitle": { "type": ["string", "null"], "maxLength": 500 },
+    "sourceType": { "enum": ["TEXT", "MARKDOWN", "PDF", "DOCX", "WEB"] },
+    "page": { "type": ["integer", "null"], "minimum": 1 },
+    "heading": { "type": ["string", "null"], "maxLength": 1000 },
+    "paragraph": { "type": ["integer", "null"], "minimum": 1 },
+    "lineStart": { "type": ["integer", "null"], "minimum": 1 },
+    "lineEnd": { "type": ["integer", "null"], "minimum": 1 },
+    "locator": {
+      "type": ["string", "null"],
+      "format": "uri-reference",
+      "readOnly": true,
+      "description": "Short-lived or authorization-checked platform locator; never a local or object-store path."
+    }
+  }
+}

@@ -23,6 +23,8 @@ tags:
     description: Provider-neutral model providers, definitions, and immutable route versions.
   - name: Prompts
     description: Prompt assets and immutable Prompt versions.
+  - name: Knowledge
+    description: Contract-only P2 source, ingestion, immutable index, retrieval, and citation operations.
   - name: Secrets
     description: Metadata-only references to externally injected secrets.
   - name: Access
@@ -430,7 +432,10 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreateModelRouteRequest" }
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CreateModelRouteRequest"
+                - $ref: "#/components/schemas/CreateEmbeddingModelRouteRequest"
       responses:
         "201":
           description: Route version published.
@@ -553,6 +558,583 @@ paths:
       responses:
         "204": { description: API key revoked. }
         "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-bases:
+    get:
+      tags: [Knowledge]
+      summary: List Knowledge Bases
+      operationId: listKnowledgeBases
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace-scoped Knowledge Bases.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeBase" } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Create a Knowledge Base
+      operationId: createKnowledgeBase
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateKnowledgeBaseRequest" }
+      responses:
+        "201":
+          description: Knowledge Base created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeBase" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-bases/{knowledgeBaseId}/sources:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/KnowledgeBaseId"
+    get:
+      tags: [Knowledge]
+      summary: List sources in a Knowledge Base
+      operationId: listKnowledgeSources
+      x-apvero-implementation-status: contract-only
+      responses:
+        "200":
+          description: Authorized Knowledge sources.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeSource" } }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Add an inline text, Markdown, or public web source
+      operationId: createKnowledgeSource
+      x-apvero-implementation-status: contract-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CreateInlineKnowledgeSourceRequest"
+                - $ref: "#/components/schemas/CreateWebKnowledgeSourceRequest"
+              discriminator:
+                propertyName: sourceType
+      responses:
+        "202":
+          description: Immutable source snapshot and ingestion job accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceIngestionReceipt" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-bases/{knowledgeBaseId}/source-uploads:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/KnowledgeBaseId"
+    post:
+      tags: [Knowledge]
+      summary: Upload a bounded PDF, DOCX, Markdown, or text source
+      operationId: uploadKnowledgeSource
+      x-apvero-implementation-status: contract-only
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, file]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 160 }
+                file: { type: string, format: binary }
+      responses:
+        "202":
+          description: Immutable upload snapshot and ingestion job accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceIngestionReceipt" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-sources/{sourceId}:
+    delete:
+      tags: [Knowledge]
+      summary: Tombstone a source for future index builds
+      description: Existing immutable source revisions, index versions, releases, and Runs remain unchanged.
+      operationId: tombstoneKnowledgeSource
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceId"
+      responses:
+        "204": { description: Source tombstoned for future builds. }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-sources/{sourceId}/revisions:
+    get:
+      tags: [Knowledge]
+      summary: List immutable source revisions
+      operationId: listKnowledgeSourceRevisions
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceId"
+      responses:
+        "200":
+          description: Immutable revision lineage, newest first.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeSourceRevision" } }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Add an immutable revision to an existing text or Markdown source
+      operationId: createInlineKnowledgeSourceRevision
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInlineKnowledgeSourceRevisionRequest" }
+      responses:
+        "202":
+          description: New immutable revision and ingestion job accepted, or an audited unchanged result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceRevisionReceipt" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-sources/{sourceId}/revision-uploads:
+    post:
+      tags: [Knowledge]
+      summary: Add an immutable revision to an existing uploaded source
+      operationId: uploadKnowledgeSourceRevision
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "202":
+          description: New immutable revision and ingestion job accepted, or an audited unchanged result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceRevisionReceipt" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-sources/{sourceId}/sync:
+    post:
+      tags: [Knowledge]
+      summary: Resnapshot and ingest a web source
+      operationId: synchronizeKnowledgeSource
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceId"
+      responses:
+        "202":
+          description: Resnapshot job scheduled; poll the persisted job for CHANGED or UNCHANGED outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceSyncReceipt" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-source-revisions/{revisionId}/content:
+    get:
+      tags: [Knowledge]
+      summary: Read an authorized immutable source snapshot
+      description: Streams retained source bytes through the platform; never returns a database, filesystem, or object-store path.
+      operationId: getKnowledgeSourceRevisionContent
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeSourceRevisionId"
+      responses:
+        "200":
+          description: Authorized immutable snapshot content.
+          headers:
+            ETag:
+              description: SHA-256 identity of the immutable snapshot.
+              schema: { type: string }
+            Content-Disposition:
+              description: Safe attachment filename generated from source metadata.
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-ingestion-jobs:
+    get:
+      tags: [Knowledge]
+      summary: List persisted ingestion jobs
+      operationId: listKnowledgeIngestionJobs
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: knowledgeBaseId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/IngestionJobStatus" }
+      responses:
+        "200":
+          description: Workspace-scoped persisted jobs.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeIngestionJob" } }
+        "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-ingestion-jobs/{jobId}:
+    get:
+      tags: [Knowledge]
+      summary: Get ingestion state and retry evidence
+      operationId: getKnowledgeIngestionJob
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/IngestionJobId"
+      responses:
+        "200":
+          description: Persisted job state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-ingestion-jobs/{jobId}/retry:
+    post:
+      tags: [Knowledge]
+      summary: Retry a retryable failed ingestion job
+      operationId: retryKnowledgeIngestionJob
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/IngestionJobId"
+      responses:
+        "202":
+          description: Retry scheduled from the last durable step.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-ingestion-jobs/{jobId}/cancel:
+    post:
+      tags: [Knowledge]
+      summary: Cancel a queued or retry-wait ingestion job
+      operationId: cancelKnowledgeIngestionJob
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/IngestionJobId"
+      responses:
+        "200":
+          description: Job cancellation persisted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-indexes:
+    get:
+      tags: [Knowledge]
+      summary: List Knowledge index identities
+      operationId: listKnowledgeIndexes
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace-scoped index identities.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeIndex" } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Create a stable Knowledge index identity
+      operationId: createKnowledgeIndex
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateKnowledgeIndexRequest" }
+      responses:
+        "201":
+          description: Index identity created; no version is published yet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIndex" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-indexes/{indexId}/builds:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/KnowledgeIndexId"
+    get:
+      tags: [Knowledge]
+      summary: List persisted builds for one index
+      operationId: listKnowledgeIndexBuilds
+      x-apvero-implementation-status: contract-only
+      responses:
+        "200":
+          description: Newest builds first.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeIndexBuild" } }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Build and validate a candidate immutable index version
+      operationId: createKnowledgeIndexBuild
+      x-apvero-implementation-status: contract-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateKnowledgeIndexBuildRequest" }
+      responses:
+        "202":
+          description: Persisted build accepted; publication occurs only after validation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIndexBuild" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-index-builds/{buildId}:
+    get:
+      tags: [Knowledge]
+      summary: Get index build state and validation evidence
+      operationId: getKnowledgeIndexBuild
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeIndexBuildId"
+      responses:
+        "200":
+          description: Persisted build state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIndexBuild" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-index-builds/{buildId}/retry:
+    post:
+      tags: [Knowledge]
+      summary: Retry a retryable failed index build
+      operationId: retryKnowledgeIndexBuild
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeIndexBuildId"
+      responses:
+        "202":
+          description: Retry scheduled from the last durable build step.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIndexBuild" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-index-builds/{buildId}/cancel:
+    post:
+      tags: [Knowledge]
+      summary: Cancel a queued or retry-wait index build
+      operationId: cancelKnowledgeIndexBuild
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/KnowledgeIndexBuildId"
+      responses:
+        "200":
+          description: Build cancellation persisted without publishing a version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeIndexBuild" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-index-versions:
+    get:
+      tags: [Knowledge]
+      summary: List immutable published Knowledge index versions
+      operationId: listKnowledgeIndexVersions
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: indexId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Only atomically published READY versions.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/KnowledgeIndexVersion" } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /api/v1/retrieval-policy-versions:
+    get:
+      tags: [Knowledge]
+      summary: List immutable retrieval policy versions
+      operationId: listRetrievalPolicyVersions
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      responses:
+        "200":
+          description: Workspace-scoped immutable policies.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/RetrievalPolicyVersion" } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [Knowledge]
+      summary: Publish an immutable retrieval policy version
+      operationId: createRetrievalPolicyVersion
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRetrievalPolicyVersionRequest" }
+      responses:
+        "201":
+          description: Immutable retrieval policy published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetrievalPolicyVersion" }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/knowledge-retrieval-tests:
+    post:
+      tags: [Knowledge]
+      summary: Inspect ranked evidence from an exact index and policy version
+      operationId: testKnowledgeRetrieval
+      x-apvero-implementation-status: contract-only
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeRetrievalTestRequest" }
+      responses:
+        "200":
+          description: Ranked authorized evidence or an explicit empty result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeRetrievalResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/applications/{applicationId}/draft/knowledge-bindings:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ApplicationId"
+    get:
+      tags: [Applications, Knowledge]
+      summary: Get exact Knowledge bindings on an Application draft
+      operationId: getApplicationDraftKnowledgeBindings
+      x-apvero-implementation-status: contract-only
+      responses:
+        "200":
+          description: Mutable draft selections; production still uses immutable release pins.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ApplicationKnowledgeBinding" } }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      tags: [Applications, Knowledge]
+      summary: Replace exact Knowledge bindings on an Application draft
+      operationId: replaceApplicationDraftKnowledgeBindings
+      x-apvero-implementation-status: contract-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceApplicationKnowledgeBindingsRequest" }
+      responses:
+        "200":
+          description: Authorized READY versions bound to the mutable draft.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ApplicationKnowledgeBinding" } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/runs/{runId}/retrieval:
+    get:
+      tags: [Runs, Knowledge]
+      summary: Inspect retained retrieval evidence for a Run
+      operationId: getRunRetrievalEvidence
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Ordered, retention-aware evidence used by the Run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunRetrievalEvidence" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/runs/{runId}/citations:
+    get:
+      tags: [Runs, Knowledge]
+      summary: List citations validated for a grounded Run
+      operationId: listRunCitations
+      x-apvero-implementation-status: contract-only
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Citations validated against this Run's retained evidence.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "../schemas/citation.v1.schema.json" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     bearerAuth:
@@ -568,6 +1150,41 @@ components:
       description: Explicit workspace security and data scope.
     ApplicationId:
       name: applicationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KnowledgeBaseId:
+      name: knowledgeBaseId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KnowledgeSourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KnowledgeSourceRevisionId:
+      name: revisionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IngestionJobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KnowledgeIndexId:
+      name: indexId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KnowledgeIndexBuildId:
+      name: buildId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RunId:
+      name: runId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -806,6 +1423,11 @@ components:
         inputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
         outputCostMicrosPerMillion: { type: integer, format: int64, minimum: 0 }
     ModelRoute:
+      oneOf:
+        - $ref: "#/components/schemas/LegacyChatModelRoute"
+        - $ref: "#/components/schemas/EmbeddingModelRoute"
+      description: Live P1 CHAT route or contract-only P2 EMBEDDING route; both remain one provider-neutral route aggregate.
+    LegacyChatModelRoute:
       type: object
       additionalProperties: false
       required: [id, tenantId, workspaceId, name, version, modelId, status, timeoutMs, maxOutputTokens, createdAt]
@@ -821,6 +1443,23 @@ components:
         maxOutputTokens: { type: integer, minimum: 1, maximum: 200000 }
         temperature: { type: [number, "null"], minimum: 0, maximum: 2 }
         createdAt: { type: string, format: date-time }
+    EmbeddingModelRoute:
+      type: object
+      additionalProperties: false
+      x-apvero-implementation-status: contract-only
+      required: [id, tenantId, workspaceId, name, version, modelId, routeCapability, status, timeoutMs, embeddingProfile, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: integer, format: int64, minimum: 1 }
+        modelId: { type: string, format: uuid }
+        routeCapability: { type: string, const: EMBEDDING }
+        status: { type: string, enum: [PUBLISHED, DEPRECATED] }
+        timeoutMs: { type: integer, minimum: 1000, maximum: 300000 }
+        embeddingProfile: { $ref: "#/components/schemas/EmbeddingRouteProfile" }
+        createdAt: { type: string, format: date-time }
     CreateModelRouteRequest:
       type: object
       additionalProperties: false
@@ -831,6 +1470,26 @@ components:
         timeoutMs: { type: integer, minimum: 1000, maximum: 300000 }
         maxOutputTokens: { type: integer, minimum: 1, maximum: 200000 }
         temperature: { type: [number, "null"], minimum: 0, maximum: 2 }
+    CreateEmbeddingModelRouteRequest:
+      type: object
+      additionalProperties: false
+      x-apvero-implementation-status: contract-only
+      required: [routeCapability, name, modelId, timeoutMs, embeddingProfile]
+      properties:
+        routeCapability: { type: string, const: EMBEDDING }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        modelId: { type: string, format: uuid }
+        timeoutMs: { type: integer, minimum: 1000, maximum: 300000 }
+        embeddingProfile: { $ref: "#/components/schemas/EmbeddingRouteProfile" }
+    EmbeddingRouteProfile:
+      type: object
+      additionalProperties: false
+      required: [dimension, maximumInputTokens, maximumBatchSize, normalization]
+      properties:
+        dimension: { type: integer, minimum: 1, maximum: 65535 }
+        maximumInputTokens: { type: integer, minimum: 1, maximum: 2000000 }
+        maximumBatchSize: { type: integer, minimum: 1, maximum: 4096 }
+        normalization: { type: string, enum: [NONE, L2] }
     PromptAsset:
       type: object
       additionalProperties: false
@@ -895,6 +1554,365 @@ components:
       properties:
         credential: { $ref: "#/components/schemas/ApiCredential" }
         plaintext: { type: string, writeOnly: true }
+    KnowledgeBase:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, slug, name, description, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateKnowledgeBaseRequest:
+      type: object
+      additionalProperties: false
+      required: [slug, name]
+      properties:
+        slug: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000, default: "" }
+    KnowledgeSourceType:
+      type: string
+      enum: [TEXT, MARKDOWN, PDF, DOCX, WEB]
+    KnowledgeSource:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, knowledgeBaseId, name, sourceType, status, revisionCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        knowledgeBaseId: { type: string, format: uuid }
+        name: { type: string }
+        sourceType: { $ref: "#/components/schemas/KnowledgeSourceType" }
+        status: { type: string, enum: [ACTIVE, TOMBSTONED] }
+        canonicalUrl: { type: [string, "null"], format: uri, writeOnly: true }
+        revisionCount: { type: integer, minimum: 0 }
+        latestRevisionId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateInlineKnowledgeSourceRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceType, name, content]
+      properties:
+        sourceType: { type: string, enum: [TEXT, MARKDOWN] }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        content: { type: string, minLength: 1, maxLength: 5242880 }
+    CreateWebKnowledgeSourceRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceType, name, url]
+      properties:
+        sourceType: { type: string, const: WEB }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        url: { type: string, format: uri, maxLength: 2048, writeOnly: true }
+    CreateInlineKnowledgeSourceRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 5242880 }
+    KnowledgeSourceRevision:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, sourceId, revision, contentDigest, mediaType, byteSize, snapshotStatus, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        mediaType: { type: string, maxLength: 160 }
+        byteSize: { type: integer, format: int64, minimum: 1 }
+        snapshotStatus: { type: string, enum: [SNAPSHOTTED, REJECTED] }
+        parserVersion: { type: [string, "null"], maxLength: 120 }
+        chunkerVersion: { type: [string, "null"], maxLength: 120 }
+        createdAt: { type: string, format: date-time }
+    IngestionJobStatus:
+      type: string
+      enum: [QUEUED, SNAPSHOTTING, PARSING, CHUNKING, EMBEDDING, INDEXING, VALIDATING, READY, RETRY_WAIT, FAILED, CANCELLED]
+    KnowledgeIngestionJob:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, knowledgeBaseId, sourceId, sourceRevisionId, status, currentStep, attemptCount, retryable, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        knowledgeBaseId: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        sourceRevisionId:
+          type: [string, "null"]
+          format: uuid
+          description: Null only while a web source is still in SNAPSHOTTING.
+        status: { $ref: "#/components/schemas/IngestionJobStatus" }
+        currentStep: { type: string, enum: [SNAPSHOTTING, PARSING, CHUNKING, EMBEDDING, INDEXING, VALIDATING, COMPLETE] }
+        attemptCount: { type: integer, minimum: 0 }
+        retryable: { type: boolean }
+        syncOutcome: { type: [string, "null"], enum: [CHANGED, UNCHANGED, null] }
+        nextAttemptAt: { type: [string, "null"], format: date-time }
+        errorCode: { type: [string, "null"], maxLength: 120 }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SourceIngestionReceipt:
+      type: object
+      additionalProperties: false
+      required: [source, revision, job]
+      properties:
+        source: { $ref: "#/components/schemas/KnowledgeSource" }
+        revision:
+          description: Null while an asynchronous web snapshot has not produced an immutable revision.
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeSourceRevision"
+            - type: "null"
+        job: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+    SourceSyncReceipt:
+      type: object
+      additionalProperties: false
+      required: [outcome, source, job]
+      properties:
+        outcome: { type: string, const: SCHEDULED }
+        source: { $ref: "#/components/schemas/KnowledgeSource" }
+        job: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+    SourceRevisionReceipt:
+      type: object
+      additionalProperties: false
+      required: [outcome, source, revision, job]
+      properties:
+        outcome: { type: string, enum: [CHANGED, UNCHANGED] }
+        source: { $ref: "#/components/schemas/KnowledgeSource" }
+        revision:
+          description: Null only when the submitted bytes match the latest revision.
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeSourceRevision"
+            - type: "null"
+        job:
+          description: Null only when the submitted bytes match and no ingestion work is required.
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeIngestionJob"
+            - type: "null"
+      allOf:
+        - if:
+            properties: { outcome: { const: CHANGED } }
+            required: [outcome]
+          then:
+            properties:
+              revision: { $ref: "#/components/schemas/KnowledgeSourceRevision" }
+              job: { $ref: "#/components/schemas/KnowledgeIngestionJob" }
+        - if:
+            properties: { outcome: { const: UNCHANGED } }
+            required: [outcome]
+          then:
+            properties:
+              revision: { type: "null" }
+              job: { type: "null" }
+    KnowledgeIndex:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, knowledgeBaseId, slug, name, status, versionCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        knowledgeBaseId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+        versionCount: { type: integer, minimum: 0 }
+        latestReadyVersionId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateKnowledgeIndexRequest:
+      type: object
+      additionalProperties: false
+      required: [knowledgeBaseId, slug, name]
+      properties:
+        knowledgeBaseId: { type: string, format: uuid }
+        slug: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        name: { type: string, minLength: 1, maxLength: 160 }
+    KnowledgeIndexBuildStatus:
+      type: string
+      enum: [QUEUED, EMBEDDING, INDEXING, VALIDATING, READY, RETRY_WAIT, FAILED, CANCELLED]
+    CreateKnowledgeIndexBuildRequest:
+      type: object
+      additionalProperties: false
+      required: [version, embeddingRouteId, sourceRevisionIds]
+      properties:
+        version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        embeddingRouteId: { type: string, format: uuid }
+        sourceRevisionIds:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    KnowledgeIndexBuild:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, indexId, version, embeddingRouteId, status, sourceRevisionCount, chunkCount, vectorDimension, attemptCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        indexId: { type: string, format: uuid }
+        version: { type: string }
+        embeddingRouteId: { type: string, format: uuid }
+        embeddingRouteReference: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/KnowledgeIndexBuildStatus" }
+        sourceRevisionCount: { type: integer, minimum: 1 }
+        chunkCount: { type: integer, minimum: 0 }
+        vectorDimension: { type: integer, minimum: 1, maximum: 65535 }
+        attemptCount: { type: integer, minimum: 0 }
+        retryable: { type: boolean, default: false }
+        validationDigest: { type: [string, "null"], pattern: "^sha256:[a-f0-9]{64}$" }
+        publishedVersionId: { type: [string, "null"], format: uuid }
+        errorCode: { type: [string, "null"], maxLength: 120 }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: string, format: date-time }
+    KnowledgeIndexVersion:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, indexId, buildId, version, reference, embeddingRouteVersion, vectorDimension, sourceRevisionCount, chunkCount, artifactDigest, status, publishedAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        indexId: { type: string, format: uuid }
+        buildId: { type: string, format: uuid }
+        version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        reference: { type: string, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        embeddingRouteVersion: { type: string, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        vectorDimension: { type: integer, minimum: 1, maximum: 65535 }
+        sourceRevisionCount: { type: integer, minimum: 1 }
+        chunkCount: { type: integer, minimum: 1 }
+        artifactDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        status: { type: string, const: READY }
+        publishedAt: { type: string, format: date-time }
+    RetrievalPolicyVersion:
+      type: object
+      additionalProperties: false
+      required: [id, tenantId, workspaceId, slug, version, reference, topK, maxContextTokens, minimumScore, overlapHandling, emptyEvidenceBehavior, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        slug: { type: string }
+        version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        reference: { type: string, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        topK: { type: integer, minimum: 1, maximum: 100 }
+        maxContextTokens: { type: integer, minimum: 128, maximum: 200000 }
+        minimumScore: { type: number, minimum: 0, maximum: 1 }
+        overlapHandling: { type: string, enum: [KEEP, COLLAPSE_ADJACENT] }
+        emptyEvidenceBehavior: { type: string, const: NO_EVIDENCE }
+        createdAt: { type: string, format: date-time }
+    CreateRetrievalPolicyVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [slug, version, topK, maxContextTokens, minimumScore, overlapHandling]
+      properties:
+        slug: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        topK: { type: integer, minimum: 1, maximum: 100 }
+        maxContextTokens: { type: integer, minimum: 128, maximum: 200000 }
+        minimumScore: { type: number, minimum: 0, maximum: 1 }
+        overlapHandling: { type: string, enum: [KEEP, COLLAPSE_ADJACENT] }
+    KnowledgeRetrievalTestRequest:
+      type: object
+      additionalProperties: false
+      required: [indexVersionId, retrievalPolicyVersionId, query]
+      properties:
+        indexVersionId: { type: string, format: uuid }
+        retrievalPolicyVersionId: { type: string, format: uuid }
+        query: { type: string, minLength: 1, maxLength: 20000, writeOnly: true }
+    KnowledgeRetrievalHit:
+      type: object
+      additionalProperties: false
+      required: [rank, score, sourceId, sourceRevisionId, documentId, chunkId, contentDigest]
+      properties:
+        rank: { type: integer, minimum: 1 }
+        score: { type: number, minimum: 0, maximum: 1 }
+        sourceId: { type: string, format: uuid }
+        sourceRevisionId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        chunkId: { type: string, format: uuid }
+        contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        content: { type: [string, "null"], maxLength: 20000, description: Bounded and subject to retention/masking policy. }
+        sourceTitle: { type: [string, "null"], maxLength: 500 }
+        sourceType: { $ref: "#/components/schemas/KnowledgeSourceType" }
+        page: { type: [integer, "null"], minimum: 1 }
+        heading: { type: [string, "null"], maxLength: 1000 }
+        paragraph: { type: [integer, "null"], minimum: 1 }
+        lineStart: { type: [integer, "null"], minimum: 1 }
+        lineEnd: { type: [integer, "null"], minimum: 1 }
+    KnowledgeRetrievalResult:
+      type: object
+      additionalProperties: false
+      required: [status, indexVersionId, retrievalPolicyVersionId, queryDigest, hits, latencyMs]
+      properties:
+        status: { type: string, enum: [MATCHES, NO_EVIDENCE] }
+        indexVersionId: { type: string, format: uuid }
+        retrievalPolicyVersionId: { type: string, format: uuid }
+        queryDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        hits:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/KnowledgeRetrievalHit" }
+        latencyMs: { type: integer, format: int64, minimum: 0 }
+    ApplicationKnowledgeBinding:
+      type: object
+      additionalProperties: false
+      required: [indexVersionId, indexVersionReference, retrievalPolicyVersionId, retrievalPolicyVersionReference, bindingOrder]
+      properties:
+        indexVersionId: { type: string, format: uuid }
+        indexVersionReference: { type: string }
+        retrievalPolicyVersionId: { type: string, format: uuid }
+        retrievalPolicyVersionReference: { type: string }
+        bindingOrder: { type: integer, minimum: 0, maximum: 15 }
+    ReplaceApplicationKnowledgeBindingsRequest:
+      type: object
+      additionalProperties: false
+      required: [bindings]
+      properties:
+        bindings:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [indexVersionId, retrievalPolicyVersionId]
+            properties:
+              indexVersionId: { type: string, format: uuid }
+              retrievalPolicyVersionId: { type: string, format: uuid }
+    RunRetrievalExecution:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/KnowledgeRetrievalResult"
+        - type: object
+          required: [retrievalId, sequence]
+          properties:
+            retrievalId: { type: string, format: uuid }
+            sequence: { type: integer, minimum: 0 }
+    RunRetrievalEvidence:
+      type: object
+      additionalProperties: false
+      required: [runId, retrievals]
+      properties:
+        runId: { type: string, format: uuid }
+        retrievals:
+          type: array
+          maxItems: 16
+          items: { $ref: "#/components/schemas/RunRetrievalExecution" }
     Problem:
       type: object
       required: [type, title, status, detail, code, timestamp]

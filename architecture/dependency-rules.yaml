@@ -1,4 +1,5 @@
 schemaVersion: 1
+lastReviewed: 2026-07-22
 
 defaults:
   denyUndeclaredDependencies: true
@@ -11,16 +12,20 @@ allowed:
   release:
     - application
     - capability-registry
+    - knowledge
   runtime:
     - application
     - release
     - capability-registry
+    - knowledge
   identity: []
   capability-registry:
     - identity
     - governance
   knowledge:
+    - identity
     - capability-registry
+    - governance
   evaluation:
     - application
     - release

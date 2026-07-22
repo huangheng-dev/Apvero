@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apvero.dev/grounded-answer/1.0.0",
+  "title": "Apvero Grounded Answer 1.0",
+  "description": "Structured RAG result with citations validated against the retained retrieval evidence for one Run.",
+  "x-apvero-contract-status": "contract-only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "answer", "citations"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "enum": ["GROUNDED", "NO_EVIDENCE"] },
+    "answer": { "type": "string", "maxLength": 200000 },
+    "citations": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "https://schemas.apvero.dev/citation/1.0.0" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "GROUNDED" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "answer": { "minLength": 1 },
+          "citations": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "NO_EVIDENCE" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": { "citations": { "maxItems": 0 } }
+      }
+    }
+  ]
+}
