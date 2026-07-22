@@ -6,6 +6,7 @@ import io.apvero.platform.knowledge.AddUploadedKnowledgeSourceRevisionCommand;
 import io.apvero.platform.knowledge.CreateInlineKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.CreateKnowledgeBaseCommand;
 import io.apvero.platform.knowledge.CreateUploadedKnowledgeSourceCommand;
+import io.apvero.platform.knowledge.CreateWebKnowledgeSourceCommand;
 import io.apvero.platform.knowledge.KnowledgeBase;
 import io.apvero.platform.knowledge.KnowledgeBaseCatalog;
 import io.apvero.platform.knowledge.KnowledgeCommandContext;
@@ -17,6 +18,7 @@ import io.apvero.platform.knowledge.KnowledgeSourceRevision;
 import io.apvero.platform.knowledge.KnowledgeSourceSnapshot;
 import io.apvero.platform.knowledge.SourceIngestionReceipt;
 import io.apvero.platform.knowledge.SourceRevisionReceipt;
+import io.apvero.platform.knowledge.SourceSyncReceipt;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.InputStream;
@@ -79,13 +81,22 @@ final class KnowledgeController {
             @PathVariable UUID knowledgeBaseId,
             @RequestBody CreateInlineSourceRequest request,
             HttpServletRequest httpRequest) {
+        SourceIngestionReceipt receipt;
         if (request.sourceType() == KnowledgeSource.Type.WEB) {
-            throw new KnowledgeException(
-                    "APVERO_KNOWLEDGE_WEB_CAPTURE_NOT_AVAILABLE", Category.UNPROCESSABLE);
+            if (request.content() != null) {
+                throw new KnowledgeException("APVERO_KNOWLEDGE_REQUEST_INVALID", Category.BAD_REQUEST);
+            }
+            receipt = sources.createWeb(workspaceId, knowledgeBaseId,
+                    new CreateWebKnowledgeSourceCommand(request.name(), parseUri(request.url())),
+                    context(httpRequest));
+        } else {
+            if (request.url() != null) {
+                throw new KnowledgeException("APVERO_KNOWLEDGE_REQUEST_INVALID", Category.BAD_REQUEST);
+            }
+            receipt = sources.createInline(workspaceId, knowledgeBaseId,
+                    new CreateInlineKnowledgeSourceCommand(request.sourceType(), request.name(), request.content()),
+                    context(httpRequest));
         }
-        SourceIngestionReceipt receipt = sources.createInline(workspaceId, knowledgeBaseId,
-                new CreateInlineKnowledgeSourceCommand(request.sourceType(), request.name(), request.content()),
-                context(httpRequest));
         return ResponseEntity.accepted().body(receipt);
     }
 
@@ -153,6 +164,14 @@ final class KnowledgeController {
         }
     }
 
+    @PostMapping("/knowledge-sources/{sourceId}/sync")
+    ResponseEntity<SourceSyncReceipt> synchronizeWebSource(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID sourceId,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.accepted().body(sources.synchronizeWeb(workspaceId, sourceId, context(httpRequest)));
+    }
+
     @GetMapping("/knowledge-source-revisions/{revisionId}/content")
     ResponseEntity<byte[]> readRevisionContent(
             @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
@@ -180,7 +199,15 @@ final class KnowledgeController {
 
     record CreateBaseRequest(String slug, String name, String description) {}
 
-    record CreateInlineSourceRequest(KnowledgeSource.Type sourceType, String name, String content) {}
+    private static java.net.URI parseUri(String value) {
+        try {
+            return value == null ? null : java.net.URI.create(value);
+        } catch (IllegalArgumentException exception) {
+            throw new KnowledgeException("APVERO_KNOWLEDGE_WEB_URI_INVALID", Category.BAD_REQUEST);
+        }
+    }
+
+    record CreateInlineSourceRequest(KnowledgeSource.Type sourceType, String name, String content, String url) {}
 
     record CreateInlineRevisionRequest(String content) {}
 }

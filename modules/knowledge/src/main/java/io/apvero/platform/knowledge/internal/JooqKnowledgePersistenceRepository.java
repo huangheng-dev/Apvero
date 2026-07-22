@@ -290,6 +290,66 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
                 .map(this::mapJob);
     }
 
+    @Override
+    public boolean hasActiveWebSnapshotJob(WorkspaceScope scope, UUID sourceId) {
+        return Boolean.TRUE.equals(sql.fetchValue("""
+                select exists (
+                    select 1
+                from knowledge_ingestion_job
+                where tenant_id = ? and workspace_id = ? and source_id = ?
+                  and current_step = 'SNAPSHOTTING'
+                  and status in ('QUEUED', 'SNAPSHOTTING', 'RETRY_WAIT')
+                )
+                """, scope.tenantId(), scope.workspaceId(), sourceId));
+    }
+
+    @Override
+    public Optional<IngestionJobRow> lockJob(WorkspaceScope scope, UUID jobId) {
+        return sql.fetchOptional(JOB_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and id = ? for update",
+                        scope.tenantId(), scope.workspaceId(), jobId)
+                .map(this::mapJob);
+    }
+
+    @Override
+    public Optional<IngestionJobRow> advanceWebJobAfterChangedSnapshot(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            UUID sourceRevisionId,
+            OffsetDateTime updatedAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set source_revision_id = ?, status = 'QUEUED', current_step = 'PARSING',
+                    sync_outcome = 'CHANGED', lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status in ('QUEUED', 'SNAPSHOTTING') and current_step = 'SNAPSHOTTING'
+                  and job_kind in ('CREATE_SOURCE', 'SYNCHRONIZE_SOURCE')
+                """, sourceRevisionId, timestamp(updatedAt), scope.tenantId(), scope.workspaceId(), jobId,
+                expectedVersion);
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> completeWebJobWithoutChange(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            UUID sourceRevisionId,
+            OffsetDateTime completedAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set source_revision_id = ?, status = 'READY', current_step = 'COMPLETE',
+                    sync_outcome = 'UNCHANGED', retryable = false, completed_at = ?,
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status in ('QUEUED', 'SNAPSHOTTING') and current_step = 'SNAPSHOTTING'
+                  and job_kind = 'SYNCHRONIZE_SOURCE'
+                """, sourceRevisionId, timestamp(completedAt), timestamp(completedAt), scope.tenantId(),
+                scope.workspaceId(), jobId, expectedVersion);
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
     private BaseRow mapBase(Record record) {
         return new BaseRow(
                 uuid(record, "id"), uuid(record, "tenant_id"), uuid(record, "workspace_id"),
