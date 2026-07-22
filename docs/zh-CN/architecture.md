@@ -115,7 +115,7 @@ Apvero
 | `runtime` | 运行账本、Trace 身份、Provider SPI | `application`、`release`、`capability-registry`、`knowledge` | 基线 |
 | `identity` | 租户、工作区、主体、API 粗粒度角色、哈希凭证 | 无 | 基线 |
 | `capability-registry` | Provider、模型、路由、Prompt；其他能力元数据后续实现 | `identity`、`governance` | 基线 |
-| `knowledge` | 数据源、摄取任务、Chunk、索引版本 | `identity`、`capability-registry`、`governance` | P2.1b 有 Scope 的不可变持久化；API 禁用 |
+| `knowledge` | 数据源、摄取任务、Chunk、索引版本 | `identity`、`capability-registry`、`governance` | P2.1c 非 Web Source Command 闭环；默认关闭 |
 | `evaluation` | 数据集、评测运行、实验、门禁 | `application`、`release`、`runtime` | 规划 |
 | `governance` | Secret Reference、调用前预算与限流、费用预留、审计、留存 | `identity` | P1 基线 |
 | `extension` | Plugin 兼容性、权限、签名 | `capability-registry` | 只有契约 |

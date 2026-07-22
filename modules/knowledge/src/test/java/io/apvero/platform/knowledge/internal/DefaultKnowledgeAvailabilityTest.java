@@ -13,7 +13,7 @@ class DefaultKnowledgeAvailabilityTest {
 
     @Test
     void disabledIsTheFailClosedDefault() {
-        var availability = new DefaultKnowledgeAvailability(new KnowledgeProperties(false, WORKER_URI));
+        var availability = new DefaultKnowledgeAvailability(properties(false));
 
         assertThat(availability.isEnabled()).isFalse();
         assertThatThrownBy(availability::requireEnabled)
@@ -23,9 +23,13 @@ class DefaultKnowledgeAvailabilityTest {
 
     @Test
     void explicitEnablementOpensTheGate() {
-        var availability = new DefaultKnowledgeAvailability(new KnowledgeProperties(true, WORKER_URI));
+        var availability = new DefaultKnowledgeAvailability(properties(true));
 
         assertThat(availability.isEnabled()).isTrue();
         availability.requireEnabled();
+    }
+
+    private static KnowledgeProperties properties(boolean enabled) {
+        return new KnowledgeProperties(enabled, WORKER_URI, 5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 }

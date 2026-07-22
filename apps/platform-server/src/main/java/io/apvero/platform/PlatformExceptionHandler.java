@@ -5,6 +5,7 @@ import io.apvero.platform.release.ReleaseNotFoundException;
 import io.apvero.platform.governance.BudgetExceededException;
 import io.apvero.platform.governance.RateLimitExceededException;
 import io.apvero.platform.knowledge.KnowledgeDisabledException;
+import io.apvero.platform.knowledge.KnowledgeException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 class PlatformExceptionHandler {
@@ -50,6 +52,27 @@ class PlatformExceptionHandler {
                 HttpStatus.SERVICE_UNAVAILABLE,
                 KnowledgeDisabledException.CODE,
                 KnowledgeDisabledException.CODE);
+    }
+
+    @ExceptionHandler(KnowledgeException.class)
+    ProblemDetail knowledgeProblem(KnowledgeException exception) {
+        HttpStatus status = switch (exception.category()) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case CONFLICT -> HttpStatus.CONFLICT;
+            case CONTENT_TOO_LARGE -> HttpStatus.CONTENT_TOO_LARGE;
+            case UNSUPPORTED_MEDIA -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+            case UNPROCESSABLE -> HttpStatus.UNPROCESSABLE_CONTENT;
+        };
+        return problem(status, exception.code(), exception.code());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ProblemDetail uploadTooLarge(MaxUploadSizeExceededException exception) {
+        return problem(
+                HttpStatus.CONTENT_TOO_LARGE,
+                "APVERO_KNOWLEDGE_CONTENT_TOO_LARGE",
+                "APVERO_KNOWLEDGE_CONTENT_TOO_LARGE");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

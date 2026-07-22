@@ -15,7 +15,7 @@ class KnowledgeHealthIndicatorTest {
     @Test
     void disabledModeDoesNotRequireAWorker() {
         var indicator = new KnowledgeHealthIndicator(
-                new KnowledgeProperties(false, URI.create("http://127.0.0.1:1")),
+                properties(false, URI.create("http://127.0.0.1:1")),
                 HttpClient.newHttpClient());
 
         var health = indicator.health();
@@ -54,7 +54,11 @@ class KnowledgeHealthIndicatorTest {
 
     private KnowledgeHealthIndicator indicatorFor(HttpServer server) {
         URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
-        return new KnowledgeHealthIndicator(new KnowledgeProperties(true, uri), HttpClient.newHttpClient());
+        return new KnowledgeHealthIndicator(properties(true, uri), HttpClient.newHttpClient());
+    }
+
+    private KnowledgeProperties properties(boolean enabled, URI uri) {
+        return new KnowledgeProperties(enabled, uri, 5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 
     private HttpServer serverRespondingWith(int status) throws Exception {
