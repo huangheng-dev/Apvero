@@ -100,6 +100,9 @@ stages:
       - id: P2.1
         name: Durable ingestion spine
         status: planned
+        planningEvidence:
+          - docs/en/p2-1-implementation-plan.md
+          - docs/zh-CN/p2-1-implementation-plan.md
       - id: P2.2
         name: Immutable index and Retrieval Lab
         status: planned

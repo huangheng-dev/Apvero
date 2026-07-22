@@ -1637,7 +1637,8 @@ components:
         createdAt: { type: string, format: date-time }
     IngestionJobStatus:
       type: string
-      enum: [QUEUED, SNAPSHOTTING, PARSING, CHUNKING, EMBEDDING, INDEXING, VALIDATING, READY, RETRY_WAIT, FAILED, CANCELLED]
+      description: Source snapshot, parse, and chunk lifecycle only. Embedding and indexing belong to KnowledgeIndexBuildStatus.
+      enum: [QUEUED, SNAPSHOTTING, PARSING, CHUNKING, READY, RETRY_WAIT, FAILED, CANCELLED]
     KnowledgeIngestionJob:
       type: object
       additionalProperties: false
@@ -1653,7 +1654,10 @@ components:
           format: uuid
           description: Null only while a web source is still in SNAPSHOTTING.
         status: { $ref: "#/components/schemas/IngestionJobStatus" }
-        currentStep: { type: string, enum: [SNAPSHOTTING, PARSING, CHUNKING, EMBEDDING, INDEXING, VALIDATING, COMPLETE] }
+        currentStep:
+          type: string
+          description: Current durable source-ingestion step; COMPLETE means deterministic documents and chunks are ready, not that an index exists.
+          enum: [SNAPSHOTTING, PARSING, CHUNKING, COMPLETE]
         attemptCount: { type: integer, minimum: 0 }
         retryable: { type: boolean }
         syncOutcome: { type: [string, "null"], enum: [CHANGED, UNCHANGED, null] }

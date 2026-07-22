@@ -6,6 +6,7 @@
 - Target stage / 目标阶段: P2
 - Replaces / 替代: None / 无
 - Approval record / 批准记录: Maintainer approved ADR-0006 on 2026-07-22 / 维护者于 2026-07-22 批准 ADR-0006
+- Amendment record / 修订记录: Maintainer approved the P2.1 source-ingestion/index-build lifecycle correction on 2026-07-22 / 维护者于 2026-07-22 批准 P2.1 Source Ingestion 与 Index Build 生命周期勘误
 
 ## Decision summary / 决策摘要
 
@@ -184,6 +185,7 @@ P2 全部状态通过当前迁移头之后的增量 Flyway 迁移加入。以下
 | Knowledge | `knowledge_source_revision` | Immutable content snapshot, digest and parser input metadata |
 | Knowledge | `knowledge_document` | Parser output unit and document-level lineage |
 | Knowledge | `knowledge_chunk` | Immutable normalized chunk content and anchors |
+| Knowledge | `knowledge_ingestion_job` | Persisted source snapshot/parse/chunk state, lease, retry and failure metadata |
 | Knowledge | `retrieval_policy_version` | Immutable retrieval parameters |
 | Knowledge | `knowledge_index` | Stable index identity |
 | Knowledge | `knowledge_index_build` | Persisted build state, lease, retry and failure metadata |
@@ -245,11 +247,20 @@ P2 uses a PostgreSQL lease-based job runner. It does not add Kafka or Redis.
 
 P2 使用基于 PostgreSQL 租约的任务执行器，不增加 Kafka 或 Redis。
 
+Source ingestion and index construction are separate persisted lifecycles. A P2.1 ingestion job becomes `READY` when one immutable Source Revision has a validated deterministic Document/Chunk set; it does not claim that an index exists. P2.2 starts a separate Index Build from an exact Source Revision set.
+
+Source 摄取与 Index 构建是两个独立的持久化生命周期。P2.1 摄取任务在某个不可变 Source Revision 已生成经校验的确定性 Document/Chunk 集合后进入 `READY`；这不代表 Index 已存在。P2.2 从准确的 Source Revision 集合启动独立 Index Build。
+
 ```text
+Source ingestion job (P2.1):
 QUEUED
-  -> SNAPSHOTTING
+  -> SNAPSHOTTING (web only)
   -> PARSING
   -> CHUNKING
+  -> READY
+
+Index build (P2.2):
+QUEUED
   -> EMBEDDING
   -> INDEXING
   -> VALIDATING

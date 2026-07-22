@@ -49,6 +49,8 @@ All P2 operations require `X-Apvero-Workspace-Id` plus authenticated authorizati
 
 The Java control plane owns authentication, authorization, source fetching, SSRF protection, snapshot persistence, job state, retries, identity, audit, and billing. The worker receives already captured bytes, verifies their digest, parses and chunks them, and returns deterministic ordinal output with anchors. It has no database credentials, does not fetch URLs, and is not routed to browsers.
 
+Source ingestion and index construction use separate persisted lifecycles. A P2.1 ingestion job ends after deterministic parsing/chunking; P2.2 owns `EMBEDDING`, `INDEXING`, and `VALIDATING` through `KnowledgeIndexBuildStatus`. Worker chunk offsets are zero-based Unicode code-point offsets into normalized document text with a half-open `[startOffset, endOffset)` interval; page, paragraph, and line anchors are one-based.
+
 The current P1 Compose and Nginx configuration still exposes the legacy worker service on the host and through a general `/worker/` proxy. Before P2.1 enables the parser operation, implementation must remove that general proxy and host-level business endpoint exposure; only health may remain externally observable. The P2 internal contract must never be reachable through the Console origin.
 
 ## Implementation order

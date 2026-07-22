@@ -49,6 +49,8 @@ Knowledge Base
 
 Java 控制平面负责认证、授权、数据源抓取、SSRF 防护、快照持久化、任务状态、重试、身份、审计与计费。Worker 只接收已经捕获的字节，验证摘要，完成解析和切块，再返回带来源锚点的确定性序号结果。Worker 没有数据库凭证、不抓取 URL，也不向浏览器暴露。
 
+Source 摄取与 Index 构建使用独立的持久化生命周期。P2.1 摄取任务在确定性解析/切块后结束；P2.2 通过 `KnowledgeIndexBuildStatus` 负责 `EMBEDDING`、`INDEXING`、`VALIDATING`。Worker 的 Chunk Offset 是标准化文档文本中的零基 Unicode Code Point 偏移，采用左闭右开区间 `[startOffset, endOffset)`；Page、Paragraph、Line Anchor 从 1 开始。
+
 当前 P1 Compose 与 Nginx 配置仍然把旧 Worker 服务暴露到主机，并提供通用 `/worker/` 代理。在 P2.1 启用解析操作前，实现必须删除该通用代理和主机级业务端点暴露；外部最多只能观察 Health。P2 内部契约绝不能通过 Console 同源地址访问。
 
 ## 实现顺序

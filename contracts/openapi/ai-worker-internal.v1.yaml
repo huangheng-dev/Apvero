@@ -137,8 +137,14 @@ components:
         ordinal: { type: integer, minimum: 0 }
         text: { type: string, minLength: 1, maxLength: 20000 }
         contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
-        startOffset: { type: integer, minimum: 0 }
-        endOffset: { type: integer, minimum: 1 }
+        startOffset:
+          type: integer
+          minimum: 0
+          description: Zero-based Unicode code-point offset into normalized document text; inclusive start of the chunk.
+        endOffset:
+          type: integer
+          minimum: 1
+          description: Zero-based Unicode code-point offset into normalized document text; exclusive end of the chunk.
         anchors: { $ref: "#/components/schemas/SourceAnchors" }
     SourceAnchors:
       type: object
