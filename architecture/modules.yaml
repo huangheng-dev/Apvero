@@ -45,7 +45,7 @@ modules:
     approvedBy: ADR-0006
     plannedOwns: [knowledge-base, knowledge-source, source-revision, document, chunk, ingestion-job, retrieval-policy-version, knowledge-index, index-build, immutable-index-version, retrieval-service]
     publicApi: io.apvero.platform.knowledge
-    plannedDatabaseTables: [knowledge_base, knowledge_source, knowledge_source_revision, knowledge_document, knowledge_chunk, retrieval_policy_version, knowledge_index, knowledge_index_build, knowledge_index_build_revision, knowledge_index_entry, knowledge_index_version]
+    plannedDatabaseTables: [knowledge_base, knowledge_source, knowledge_source_revision, knowledge_document, knowledge_chunk, knowledge_ingestion_job, retrieval_policy_version, knowledge_index, knowledge_index_build, knowledge_index_build_revision, knowledge_index_entry, knowledge_index_version]
 
   - id: evaluation
     status: planned
