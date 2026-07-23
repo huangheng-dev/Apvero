@@ -12,6 +12,8 @@ import io.apvero.platform.knowledge.KnowledgeBaseCatalog;
 import io.apvero.platform.knowledge.KnowledgeCommandContext;
 import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.KnowledgeException.Category;
+import io.apvero.platform.knowledge.KnowledgeIngestionJob;
+import io.apvero.platform.knowledge.KnowledgeIngestionJobCatalog;
 import io.apvero.platform.knowledge.KnowledgeSource;
 import io.apvero.platform.knowledge.KnowledgeSourceCatalog;
 import io.apvero.platform.knowledge.KnowledgeSourceRevision;
@@ -46,10 +48,15 @@ import org.springframework.web.multipart.MultipartFile;
 final class KnowledgeController {
     private final KnowledgeBaseCatalog bases;
     private final KnowledgeSourceCatalog sources;
+    private final KnowledgeIngestionJobCatalog jobs;
 
-    KnowledgeController(KnowledgeBaseCatalog bases, KnowledgeSourceCatalog sources) {
+    KnowledgeController(
+            KnowledgeBaseCatalog bases,
+            KnowledgeSourceCatalog sources,
+            KnowledgeIngestionJobCatalog jobs) {
         this.bases = bases;
         this.sources = sources;
+        this.jobs = jobs;
     }
 
     @GetMapping("/knowledge-bases")
@@ -188,6 +195,37 @@ final class KnowledgeController {
                 .body(snapshot.bytes());
     }
 
+    @GetMapping("/knowledge-ingestion-jobs")
+    List<KnowledgeIngestionJob> listJobs(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) UUID knowledgeBaseId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String status) {
+        return jobs.list(workspaceId, knowledgeBaseId, parseJobStatus(status));
+    }
+
+    @GetMapping("/knowledge-ingestion-jobs/{jobId}")
+    KnowledgeIngestionJob getJob(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID jobId) {
+        return jobs.get(workspaceId, jobId);
+    }
+
+    @PostMapping("/knowledge-ingestion-jobs/{jobId}/retry")
+    ResponseEntity<KnowledgeIngestionJob> retryJob(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID jobId,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.accepted().body(jobs.retry(workspaceId, jobId, context(httpRequest)));
+    }
+
+    @PostMapping("/knowledge-ingestion-jobs/{jobId}/cancel")
+    KnowledgeIngestionJob cancelJob(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID jobId,
+            HttpServletRequest httpRequest) {
+        return jobs.cancel(workspaceId, jobId, context(httpRequest));
+    }
+
     private static KnowledgeCommandContext context(HttpServletRequest request) {
         Object actor = request.getAttribute(RequestIdentityAttributes.ACTOR);
         String traceId = request.getHeader("X-Request-Id");
@@ -204,6 +242,14 @@ final class KnowledgeController {
             return value == null ? null : java.net.URI.create(value);
         } catch (IllegalArgumentException exception) {
             throw new KnowledgeException("APVERO_KNOWLEDGE_WEB_URI_INVALID", Category.BAD_REQUEST);
+        }
+    }
+
+    private static KnowledgeIngestionJob.Status parseJobStatus(String value) {
+        try {
+            return value == null ? null : KnowledgeIngestionJob.Status.valueOf(value);
+        } catch (IllegalArgumentException exception) {
+            throw new KnowledgeException("APVERO_KNOWLEDGE_JOB_STATUS_INVALID", Category.BAD_REQUEST);
         }
     }
 
