@@ -54,6 +54,7 @@ class SafeWebCaptureTest {
 
         assertThat(transport.addresses).containsExactly(pinned);
         assertThat(result.snapshot().sourceType().name()).isEqualTo("WEB");
+        assertThat(result.snapshot().mediaType()).isEqualTo("text/html");
         assertThat(result.captureMetadataJson())
                 .isEqualTo("{\"status\":200,\"contentType\":\"text/html; charset=utf-8\",\"redirectCount\":0}");
         assertThat(result.captureMetadataJson()).doesNotContain("example.com");

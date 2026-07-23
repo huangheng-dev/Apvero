@@ -303,10 +303,34 @@ class P21cKnowledgeSourceCommandIntegrationTest {
                 new CreateKnowledgeBaseCommand(slug("owner"), "Owner", ""), CONTEXT);
         SourceIngestionReceipt source = sources.createInline(owner.workspaceId(), base.id(),
                 new CreateInlineKnowledgeSourceCommand(KnowledgeSource.Type.TEXT, "Private", "secret"), CONTEXT);
+        SourceIngestionReceipt web = sources.createWeb(owner.workspaceId(), base.id(),
+                new CreateWebKnowledgeSourceCommand("Private Web", URI.create("https://example.com/")), CONTEXT);
 
+        assertThat(bases.list(outsider.workspaceId())).noneMatch(item -> item.id().equals(base.id()));
         assertNotFound(() -> sources.listSources(outsider.workspaceId(), base.id()),
                 "APVERO_KNOWLEDGE_BASE_NOT_FOUND");
+        assertNotFound(() -> sources.createInline(outsider.workspaceId(), base.id(),
+                        new CreateInlineKnowledgeSourceCommand(
+                                KnowledgeSource.Type.TEXT, "Attack", "content"), CONTEXT),
+                "APVERO_KNOWLEDGE_BASE_NOT_FOUND");
+        byte[] uploaded = pdf("private");
+        assertNotFound(() -> sources.createUpload(outsider.workspaceId(), base.id(),
+                        new CreateUploadedKnowledgeSourceCommand(
+                                "Attack", "private.pdf", "application/pdf", uploaded.length,
+                                new ByteArrayInputStream(uploaded)), CONTEXT),
+                "APVERO_KNOWLEDGE_BASE_NOT_FOUND");
         assertNotFound(() -> sources.listRevisions(outsider.workspaceId(), source.source().id()),
+                "APVERO_KNOWLEDGE_SOURCE_NOT_FOUND");
+        assertNotFound(() -> sources.addInlineRevision(outsider.workspaceId(), source.source().id(),
+                        new AddInlineKnowledgeSourceRevisionCommand("changed"), CONTEXT),
+                "APVERO_KNOWLEDGE_SOURCE_NOT_FOUND");
+        assertNotFound(() -> sources.addUploadRevision(outsider.workspaceId(), source.source().id(),
+                        new AddUploadedKnowledgeSourceRevisionCommand(
+                                "private.pdf", "application/pdf", uploaded.length,
+                                new ByteArrayInputStream(uploaded)), CONTEXT),
+                "APVERO_KNOWLEDGE_SOURCE_NOT_FOUND");
+        assertNotFound(() -> sources.synchronizeWeb(
+                        outsider.workspaceId(), web.source().id(), CONTEXT),
                 "APVERO_KNOWLEDGE_SOURCE_NOT_FOUND");
         assertNotFound(() -> sources.readRevisionContent(outsider.workspaceId(), source.revision().id()),
                 "APVERO_KNOWLEDGE_REVISION_NOT_FOUND");

@@ -24,7 +24,11 @@ class KnowledgeDeploymentBoundaryTest {
                 .contains("no-new-privileges:true")
                 .contains("- knowledge-internal")
                 .doesNotContain("ports:");
-        assertThat(compose).contains("knowledge-internal:\n    name: apvero_knowledge_internal\n    internal: true");
+        assertThat(compose)
+                .contains(
+                        "knowledge-internal:\n"
+                                + "    name: ${APVERO_KNOWLEDGE_NETWORK_NAME:-apvero_knowledge_internal}\n"
+                                + "    internal: true");
     }
 
     @Test

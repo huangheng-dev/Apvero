@@ -10,6 +10,7 @@ import io.apvero.platform.knowledge.KnowledgeIngestionJob;
 import io.apvero.platform.knowledge.KnowledgeIngestionJobCatalog;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.BaseRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.BaseStatus;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.ErrorCategory;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.IngestionJobRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.JobKind;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.JobStatus;
@@ -26,8 +27,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -122,6 +126,47 @@ class P21fKnowledgeIngestionRunnerIntegrationTest {
         assertThat(retried.completedAt()).isNull();
     }
 
+    @ParameterizedTest
+    @MethodSource("recoverableSteps")
+    void aNewRunnerRecoversTheSameJobAfterACrashAtEveryDurableStep(JobStep step) {
+        WorkspaceScope scope = createScope("step-" + step.name().toLowerCase());
+        IngestionJobRow job = insertJob(scope, step);
+
+        IngestionJobRow beforeCrash = leases.claim(scope, "process-before-crash", 1).getFirst();
+        assertThat(beforeCrash.id()).isEqualTo(job.id());
+        assertThat(beforeCrash.currentStep()).isEqualTo(step);
+        expire(job.id());
+
+        IngestionJobRow afterRestart = leases.claim(scope, "process-after-restart", 1).getFirst();
+        assertThat(afterRestart.id()).isEqualTo(job.id());
+        assertThat(afterRestart.currentStep()).isEqualTo(step);
+        assertThat(afterRestart.leaseOwner()).isEqualTo("process-after-restart");
+        assertThat(afterRestart.attemptCount()).isEqualTo(2);
+        assertThat(repository.listJobs(scope, null, null)).extracting(IngestionJobRow::id)
+                .containsOnly(job.id());
+    }
+
+    @Test
+    void transientFailurePersistsBackoffAndIsAutomaticallyClaimedByANewRunner() throws Exception {
+        WorkspaceScope scope = createScope("automatic-retry");
+        IngestionJobRow job = insertParsingJob(scope);
+        IngestionJobRow claimed = leases.claim(scope, "runner-before-failure", 1).getFirst();
+
+        leases.fail(scope, claimed, "runner-before-failure",
+                new KnowledgeJobLeaseService.KnowledgeJobFailure(
+                        "WORKER_UNAVAILABLE", ErrorCategory.TRANSIENT, true));
+        IngestionJobRow waiting = repository.findJob(scope, job.id()).orElseThrow();
+        assertThat(waiting.status()).isEqualTo(JobStatus.RETRY_WAIT);
+        assertThat(waiting.nextAttemptAt()).isNotNull();
+        assertThat(waiting.leaseOwner()).isNull();
+
+        Thread.sleep(30);
+        IngestionJobRow retried = leases.claim(scope, "runner-after-failure", 1).getFirst();
+        assertThat(retried.id()).isEqualTo(job.id());
+        assertThat(retried.attemptCount()).isEqualTo(2);
+        assertThat(retried.leaseOwner()).isEqualTo("runner-after-failure");
+    }
+
     @Test
     void readsAndCommandsFailClosedAcrossWorkspaceScope() {
         WorkspaceScope owner = createScope("api-owner");
@@ -157,25 +202,38 @@ class P21fKnowledgeIngestionRunnerIntegrationTest {
     }
 
     private IngestionJobRow insertParsingJob(WorkspaceScope scope) {
+        return insertJob(scope, JobStep.PARSING);
+    }
+
+    private IngestionJobRow insertJob(WorkspaceScope scope, JobStep step) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         BaseRow base = repository.insertBase(scope, new BaseRow(
                 UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), "base-" + suffix,
                 "Base", "", BaseStatus.ACTIVE, 1, now, now));
+        SourceType sourceType = step == JobStep.SNAPSHOTTING ? SourceType.WEB : SourceType.TEXT;
         SourceRow source = repository.insertSource(scope, new SourceRow(
                 UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), base.id(), "Source",
-                SourceType.TEXT, SourceStatus.ACTIVE, null, 0, null, 1, null, null, now, now));
-        byte[] snapshot = "hello".getBytes(StandardCharsets.UTF_8);
-        SourceRevisionRow revision = repository.insertRevision(scope, new SourceRevisionRow(
-                UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), source.id(), 1,
-                digest(snapshot), "text/plain", snapshot.length, null, "{}", snapshot,
-                SnapshotStatus.SNAPSHOTTED, null, null, now));
-        SourceRow updated = repository.updateSourceRevision(
-                scope, source.id(), source.version(), 1, revision.id(), now).orElseThrow();
+                sourceType, SourceStatus.ACTIVE,
+                sourceType == SourceType.WEB ? "https://example.com/" : null,
+                0, null, 1, null, null, now, now));
+        SourceRevisionRow revision = null;
+        SourceRow updated = source;
+        if (step != JobStep.SNAPSHOTTING) {
+            byte[] snapshot = "hello".getBytes(StandardCharsets.UTF_8);
+            revision = repository.insertRevision(scope, new SourceRevisionRow(
+                    UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), source.id(), 1,
+                    digest(snapshot), "text/plain", snapshot.length, null, "{}", snapshot,
+                    SnapshotStatus.SNAPSHOTTED, null, null, now));
+            updated = repository.updateSourceRevision(
+                    scope, source.id(), source.version(), 1, revision.id(), now).orElseThrow();
+        }
         UUID jobId = UUID.randomUUID();
+        JobStatus initialStatus = step == JobStep.CHUNKING ? JobStatus.CHUNKING : JobStatus.QUEUED;
         return repository.insertJob(scope, new IngestionJobRow(
-                jobId, scope.tenantId(), scope.workspaceId(), base.id(), updated.id(), revision.id(),
-                JobKind.CREATE_SOURCE, JobStatus.QUEUED, JobStep.PARSING, SyncOutcome.CHANGED,
+                jobId, scope.tenantId(), scope.workspaceId(), base.id(), updated.id(),
+                revision == null ? null : revision.id(),
+                JobKind.CREATE_SOURCE, initialStatus, step, SyncOutcome.CHANGED,
                 0, 3, null, null, null, 1, "test:" + jobId, false, null, null, "{}",
                 false, null, null, now, now));
     }
@@ -194,5 +252,9 @@ class P21fKnowledgeIngestionRunnerIntegrationTest {
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    private static Stream<JobStep> recoverableSteps() {
+        return Stream.of(JobStep.SNAPSHOTTING, JobStep.PARSING, JobStep.CHUNKING);
     }
 }

@@ -87,16 +87,16 @@ final class SafeWebCapture {
             if (response.status() < 200 || response.status() >= 300) {
                 throw problem("APVERO_KNOWLEDGE_WEB_FETCH_REJECTED", Category.UNPROCESSABLE);
             }
-            String mediaType = supportedMediaType(response.singleHeader("content-type"));
+            SupportedMediaType mediaType = supportedMediaType(response.singleHeader("content-type"));
             if (response.body().length == 0) {
                 throw problem("APVERO_KNOWLEDGE_CONTENT_REQUIRED", Category.UNPROCESSABLE);
             }
             String metadata = "{\"status\":" + response.status()
-                    + ",\"contentType\":\"" + json(mediaType)
+                    + ",\"contentType\":\"" + json(mediaType.declared())
                     + "\",\"redirectCount\":" + redirects + "}";
             KnowledgeCapturedSnapshot snapshot = new KnowledgeCapturedSnapshot(
                     KnowledgeSource.Type.WEB,
-                    mediaType,
+                    mediaType.essence(),
                     null,
                     digest(response.body()),
                     response.body());
@@ -284,7 +284,7 @@ final class SafeWebCapture {
         return true;
     }
 
-    private static String supportedMediaType(String value) {
+    private static SupportedMediaType supportedMediaType(String value) {
         if (value == null || value.isBlank() || value.length() > 160) {
             throw problem("APVERO_KNOWLEDGE_WEB_MEDIA_UNSUPPORTED", Category.UNSUPPORTED_MEDIA);
         }
@@ -297,7 +297,7 @@ final class SafeWebCapture {
         if (!normalized.chars().allMatch(character -> character >= 0x20 && character != 0x7f)) {
             throw problem("APVERO_KNOWLEDGE_WEB_MEDIA_UNSUPPORTED", Category.UNSUPPORTED_MEDIA);
         }
-        return normalized;
+        return new SupportedMediaType(essence, normalized);
     }
 
     private static boolean isRedirect(int status) {
@@ -363,6 +363,8 @@ final class SafeWebCapture {
             URI finalUri,
             String captureMetadataJson,
             KnowledgeCapturedSnapshot snapshot) {}
+
+    private record SupportedMediaType(String essence, String declared) {}
 
     private record HostPort(String host, int port) {}
 }

@@ -25,7 +25,7 @@ class KnowledgeSourceCaptureTest {
         KnowledgeCapturedSnapshot snapshot = capture.inline(KnowledgeSource.Type.MARKDOWN, "# 你好");
 
         assertThat(snapshot.sourceType()).isEqualTo(KnowledgeSource.Type.MARKDOWN);
-        assertThat(snapshot.mediaType()).isEqualTo("text/markdown; charset=utf-8");
+        assertThat(snapshot.mediaType()).isEqualTo("text/markdown");
         assertThat(snapshot.bytes()).containsExactly("# 你好".getBytes(StandardCharsets.UTF_8));
         assertThat(snapshot.contentDigest()).matches("^sha256:[a-f0-9]{64}$");
 

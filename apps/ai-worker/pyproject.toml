@@ -17,6 +17,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "httpx2==2.7.0",
+  "jsonschema[format]==4.26.0",
   "pip-audit==2.10.1",
   "pytest==9.1.1",
   "ruff==0.14.14",

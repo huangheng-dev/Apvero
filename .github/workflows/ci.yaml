@@ -115,3 +115,66 @@ jobs:
           tags: apvero/ai-worker:ci
           cache-from: type=gha,scope=ai-worker
           cache-to: type=gha,mode=max,scope=ai-worker
+
+  knowledge-compose:
+    needs: [backend, worker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: apvero-knowledge-ci
+      APVERO_POSTGRES_VOLUME_NAME: apvero_knowledge_ci_postgres
+      APVERO_BACKEND_NETWORK_NAME: apvero_knowledge_ci_backend
+      APVERO_KNOWLEDGE_NETWORK_NAME: apvero_knowledge_ci_internal
+      APVERO_BOOTSTRAP_ADMIN_TOKEN: apvero-compose-verification
+      APVERO_KNOWLEDGE_WORKER_READ_TIMEOUT: 3s
+      APVERO_KNOWLEDGE_WEB_MAX_REDIRECTS: 0
+      APVERO_KNOWLEDGE_WEB_CONNECT_TIMEOUT: 1s
+      APVERO_KNOWLEDGE_WEB_READ_TIMEOUT: 2s
+      APVERO_KNOWLEDGE_RUNNER_LEASE_DURATION: 4s
+      APVERO_KNOWLEDGE_RUNNER_POLL_INTERVAL: 200ms
+      APVERO_KNOWLEDGE_RUNNER_BACKOFF_BASE: 30s
+      APVERO_KNOWLEDGE_RUNNER_BACKOFF_MAXIMUM: 30s
+      APVERO_KNOWLEDGE_RUNNER_GRACEFUL_DRAIN: 2s
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: platform-server-jar
+          path: apps/platform-server/build/libs
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+        working-directory: apps/ai-worker
+      - name: Start the enabled Knowledge profile and wait for health
+        run: >-
+          docker compose --profile knowledge
+          -f deploy/compose/compose.yaml
+          -f deploy/compose/compose.knowledge.yaml
+          up -d --build --wait --wait-timeout 180 postgres ai-worker platform-server
+      - name: Verify all five sources and the resync/tombstone workflow
+        run: uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py full
+      - name: Verify persisted retry across a platform process restart
+        shell: bash
+        run: |
+          compose=(docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml)
+          "${compose[@]}" stop ai-worker
+          job_id="$(uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py create-retry-source)"
+          uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py wait-job "$job_id" RETRY_WAIT
+          "${compose[@]}" restart platform-server
+          "${compose[@]}" start ai-worker
+          "${compose[@]}" up -d --wait --wait-timeout 120 postgres ai-worker platform-server
+          uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py wait-job "$job_id" READY
+      - name: Capture service state and logs
+        if: always()
+        run: |
+          docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml ps
+          docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml logs --no-color
+      - name: Remove the isolated verification stack
+        if: always()
+        run: >-
+          docker compose --profile knowledge
+          -f deploy/compose/compose.yaml
+          -f deploy/compose/compose.knowledge.yaml
+          down --volumes --remove-orphans

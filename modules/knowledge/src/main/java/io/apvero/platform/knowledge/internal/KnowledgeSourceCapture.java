@@ -55,8 +55,8 @@ final class KnowledgeSourceCapture {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         requireSnapshotSize(bytes.length);
         String mediaType = sourceType == KnowledgeSource.Type.MARKDOWN
-                ? "text/markdown; charset=utf-8"
-                : "text/plain; charset=utf-8";
+                ? "text/markdown"
+                : "text/plain";
         return snapshot(sourceType, mediaType, null, bytes);
     }
 
@@ -93,8 +93,8 @@ final class KnowledgeSourceCapture {
                 ? KnowledgeSource.Type.MARKDOWN
                 : KnowledgeSource.Type.TEXT;
         String mediaType = textType == KnowledgeSource.Type.MARKDOWN
-                ? "text/markdown; charset=utf-8"
-                : "text/plain; charset=utf-8";
+                ? "text/markdown"
+                : "text/plain";
         return snapshot(textType, mediaType, filename, bytes);
     }
 

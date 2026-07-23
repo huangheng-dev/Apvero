@@ -49,6 +49,16 @@ Knowledge and its runner remain disabled by default until P2 acceptance. Enable 
 | `APVERO_KNOWLEDGE_RUNNER_BACKOFF_MAXIMUM` | `5m` | Retry delay ceiling |
 | `APVERO_KNOWLEDGE_RUNNER_GRACEFUL_DRAIN` | `30s` | Maximum local shutdown drain |
 
+The supported Compose activation uses the Knowledge overlay. It enables Knowledge and makes
+Platform Server startup depend on Worker health without changing the default disabled profile:
+
+```text
+docker compose --profile knowledge \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.knowledge.yaml \
+  up -d --build --wait
+```
+
 The runner publishes low-cardinality Micrometer metrics:
 
 - `apvero.knowledge.ingestion.claimed` tagged by step;
@@ -72,6 +82,17 @@ Automated coverage includes:
 - cross-workspace query and command denial;
 - end-to-end inline source to leased Worker execution, atomic Documents/Chunks, `READY`, and audit;
 - the existing five media types, Worker validation, web SSRF controls, immutable replay, migrations, architecture, and internationalization suites.
+- recovery after a crash at each persisted `SNAPSHOTTING`, `PARSING`, and `CHUNKING` step;
+- automatic transient retry claimed by a new runner identity;
+- direct Worker request/response validation against the committed OpenAPI 3.1 contract;
+- Platform REST method/path conformance against the committed P2.1 OpenAPI subset;
+- log-redaction verification using a deliberately sensitive exception message;
+- an enabled Compose workflow covering all five source types, lineage inspection,
+  unchanged web resynchronization, tombstone rejection, Worker outage, Platform restart,
+  automatic retry, health recovery, and final `READY`.
+- local isolated Compose evidence for the five-source workflow and for the same persisted job
+  moving from attempt 1 `RETRY_WAIT` to attempt 2 `READY` across a Platform Server restart.
+- integration regressions for HTTP/1.1 Worker transport and canonical media-type persistence.
 
 Required command:
 

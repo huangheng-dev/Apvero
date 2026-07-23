@@ -1,0 +1,11 @@
+services:
+  platform-server:
+    build:
+      target: runtime-prebuilt
+    environment:
+      APVERO_KNOWLEDGE_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-worker:
+        condition: service_healthy
