@@ -19,6 +19,7 @@ class KnowledgeConfiguration {
         return HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
                 .followRedirects(HttpClient.Redirect.NEVER)
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
     }
 }

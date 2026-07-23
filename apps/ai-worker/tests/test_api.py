@@ -1,11 +1,15 @@
 import hashlib
+from pathlib import Path
 from uuid import uuid4
 
+import yaml
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator, FormatChecker
 
 from apvero_worker.main import app
 
 client = TestClient(app)
+CONTRACT_PATH = Path(__file__).parents[3] / "contracts" / "openapi" / "ai-worker-internal.v1.yaml"
 
 
 def test_health_contract() -> None:
@@ -76,6 +80,86 @@ def test_internal_document_processing_returns_safe_problem_details() -> None:
     }
     assert "private source content" not in response.text
     assert "secret.txt" not in response.text
+
+
+def test_runtime_request_and_responses_conform_to_the_versioned_openapi_contract() -> None:
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    runtime = app.openapi()
+    contract_operation = contract["paths"]["/internal/v1/documents/process"]["post"]
+    runtime_operation = runtime["paths"]["/internal/v1/documents/process"]["post"]
+
+    contract_request = contract_operation["requestBody"]["content"]["multipart/form-data"]["schema"]
+    runtime_schema = runtime_operation["requestBody"]["content"]["multipart/form-data"]["schema"]
+    runtime_request = _resolve(runtime, runtime_schema)
+    assert set(runtime_request["required"]) == set(contract_request["required"])
+    assert set(runtime_request["properties"]) == set(contract_request["properties"])
+
+    request_id = uuid4()
+    revision_id = uuid4()
+    content = b"# Contract\nThe response must match the committed OpenAPI schema."
+    success = client.post(
+        "/internal/v1/documents/process",
+        data={
+            "requestId": str(request_id),
+            "sourceRevisionId": str(revision_id),
+            "contentDigest": _digest(content),
+            "mediaType": "text/markdown",
+            "processingProfile": "apvero-default@1.0.0",
+        },
+        files={"content": ("snapshot.bin", content, "application/octet-stream")},
+    )
+    assert success.status_code == 200
+    _validate_contract_instance(
+        contract,
+        contract_operation["responses"]["200"]["content"]["application/json"]["schema"],
+        success.json(),
+    )
+
+    failure = client.post(
+        "/internal/v1/documents/process",
+        data={
+            "requestId": str(request_id),
+            "sourceRevisionId": str(revision_id),
+            "contentDigest": _digest(b"different"),
+            "mediaType": "text/plain",
+            "processingProfile": "apvero-default@1.0.0",
+        },
+        files={"content": ("snapshot.bin", content, "application/octet-stream")},
+    )
+    assert failure.status_code == 400
+    problem_response = contract["components"]["responses"]["WorkerProblem"]
+    _validate_contract_instance(
+        contract,
+        problem_response["content"]["application/problem+json"]["schema"],
+        failure.json(),
+    )
+
+
+def _resolve(document: dict, schema: dict) -> dict:
+    if "$ref" not in schema:
+        return schema
+    current = document
+    for segment in schema["$ref"].removeprefix("#/").split("/"):
+        current = current[segment]
+    return current
+
+
+def _validate_contract_instance(contract: dict, schema: dict, instance: object) -> None:
+    validator = Draft202012Validator(
+        _dereference(contract, schema),
+        format_checker=FormatChecker(),
+    )
+    validator.validate(instance)
+
+
+def _dereference(document: dict, value: object) -> object:
+    if isinstance(value, list):
+        return [_dereference(document, item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if "$ref" in value:
+        return _dereference(document, _resolve(document, value))
+    return {key: _dereference(document, item) for key, item in value.items()}
 
 
 def _digest(value: bytes) -> str:
