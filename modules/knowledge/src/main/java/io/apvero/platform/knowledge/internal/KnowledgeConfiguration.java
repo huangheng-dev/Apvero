@@ -7,7 +7,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({KnowledgeProperties.class, WebCaptureProperties.class})
+@EnableConfigurationProperties({
+        KnowledgeProperties.class,
+        KnowledgeRunnerProperties.class,
+        WebCaptureProperties.class
+})
 class KnowledgeConfiguration {
 
     @Bean

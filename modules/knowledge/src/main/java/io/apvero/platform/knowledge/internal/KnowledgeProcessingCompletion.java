@@ -3,10 +3,14 @@ package io.apvero.platform.knowledge.internal;
 import static io.apvero.platform.knowledge.KnowledgeException.Category.NOT_FOUND;
 import static io.apvero.platform.knowledge.KnowledgeException.Category.UNPROCESSABLE;
 
+import io.apvero.platform.governance.AuditEventCatalog;
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.ChunkRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.DocumentRow;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.IngestionJobRow;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.JobStatus;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.JobStep;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.SourceRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeWorkerModels.ProcessedBatch;
 import io.apvero.platform.knowledge.internal.KnowledgeWorkerModels.ProcessedChunk;
@@ -25,13 +29,47 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class KnowledgeProcessingCompletion {
     private final KnowledgePersistenceRepository repository;
+    private final AuditEventCatalog audit;
 
-    KnowledgeProcessingCompletion(KnowledgePersistenceRepository repository) {
+    KnowledgeProcessingCompletion(KnowledgePersistenceRepository repository, AuditEventCatalog audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     @Transactional
     void complete(WorkspaceScope scope, ProcessedBatch batch) {
+        persist(scope, batch);
+    }
+
+    @Transactional
+    IngestionJobRow completeLeased(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String leaseOwner,
+            ProcessedBatch batch) {
+        IngestionJobRow job = repository.lockJob(scope, jobId)
+                .orElseThrow(() -> new KnowledgeException("APVERO_KNOWLEDGE_JOB_NOT_FOUND", NOT_FOUND));
+        if (job.lockVersion() != expectedVersion
+                || !java.util.Objects.equals(job.leaseOwner(), leaseOwner)
+                || job.status() != JobStatus.CHUNKING
+                || job.currentStep() != JobStep.CHUNKING
+                || !java.util.Objects.equals(job.sourceRevisionId(), batch.sourceRevisionId())) {
+            throw new KnowledgeException("APVERO_KNOWLEDGE_JOB_LEASE_CONFLICT",
+                    KnowledgeException.Category.CONFLICT);
+        }
+        persist(scope, batch);
+        OffsetDateTime completedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        IngestionJobRow completed = repository.completeJob(
+                        scope, job.id(), job.lockVersion(), leaseOwner, completedAt)
+                .orElseThrow(() -> new KnowledgeException(
+                        "APVERO_KNOWLEDGE_JOB_CONCURRENT_MODIFICATION", KnowledgeException.Category.CONFLICT));
+        audit.append(scope.workspaceId(), "knowledge-job-runner", "knowledge.ingestion.ready",
+                "knowledge-ingestion-job", job.id().toString(), "SUCCEEDED", null, job.id().toString());
+        return completed;
+    }
+
+    private void persist(WorkspaceScope scope, ProcessedBatch batch) {
         SourceRevisionRow revision = repository.lockRevision(scope, batch.sourceRevisionId())
                 .orElseThrow(() -> new KnowledgeException("APVERO_KNOWLEDGE_REVISION_NOT_FOUND", NOT_FOUND));
         requireIdentity(revision, batch);

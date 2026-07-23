@@ -317,6 +317,87 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
     }
 
     @Override
+    public List<IngestionJobRow> listJobs(
+            WorkspaceScope scope, UUID knowledgeBaseId, JobStatus status) {
+        return sql.fetch(JOB_SELECT + """
+                         where tenant_id = ? and workspace_id = ?
+                           and (?::uuid is null or knowledge_base_id = ?::uuid)
+                           and (?::varchar is null or status = ?::varchar)
+                         order by created_at desc, id
+                         """, scope.tenantId(), scope.workspaceId(), knowledgeBaseId, knowledgeBaseId,
+                        enumName(status), enumName(status))
+                .map(this::mapJob);
+    }
+
+    @Override
+    public List<IngestionJobRow> claimJobs(
+            WorkspaceScope scope,
+            String leaseOwner,
+            OffsetDateTime claimedAt,
+            OffsetDateTime leaseUntil,
+            int limit) {
+        List<IngestionJobRow> candidates = sql.fetch(JOB_SELECT + """
+                         where tenant_id = ? and workspace_id = ?
+                           and attempt_count < maximum_attempts
+                           and (
+                                (status = 'QUEUED' and lease_owner is null)
+                             or (status = 'RETRY_WAIT' and next_attempt_at <= ? and lease_owner is null)
+                             or (status in ('SNAPSHOTTING', 'PARSING', 'CHUNKING')
+                                 and (lease_until is null or lease_until <= ?))
+                           )
+                         order by created_at, id
+                         for update skip locked
+                         limit ?
+                         """, scope.tenantId(), scope.workspaceId(), timestamp(claimedAt),
+                        timestamp(claimedAt), limit)
+                .map(this::mapJob);
+        return candidates.stream().map(candidate -> {
+            int changed = sql.execute("""
+                    update knowledge_ingestion_job
+                    set status = current_step, attempt_count = attempt_count + 1,
+                        next_attempt_at = null, lease_owner = ?, lease_until = ?,
+                        lock_version = lock_version + 1, retryable = false,
+                        error_code = null, error_category = null, failure_metadata = '{}'::jsonb,
+                        started_at = coalesce(started_at, ?), updated_at = ?
+                    where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                    """, leaseOwner, timestamp(leaseUntil), timestamp(claimedAt), timestamp(claimedAt),
+                    scope.tenantId(), scope.workspaceId(), candidate.id(), candidate.lockVersion());
+            if (changed != 1) {
+                throw new IllegalStateException("APVERO_KNOWLEDGE_JOB_CLAIM_CONFLICT");
+            }
+            return findJob(scope, candidate.id()).orElseThrow();
+        }).toList();
+    }
+
+    @Override
+    public List<IngestionJobRow> failExpiredExhaustedJobs(
+            WorkspaceScope scope, OffsetDateTime failedAt) {
+        List<IngestionJobRow> exhausted = sql.fetch(JOB_SELECT + """
+                         where tenant_id = ? and workspace_id = ?
+                           and status in ('SNAPSHOTTING', 'PARSING', 'CHUNKING')
+                           and (lease_until is null or lease_until <= ?)
+                           and attempt_count >= maximum_attempts
+                         for update skip locked
+                         """, scope.tenantId(), scope.workspaceId(), timestamp(failedAt))
+                .map(this::mapJob);
+        return exhausted.stream().map(job -> {
+            int changed = sql.execute("""
+                    update knowledge_ingestion_job
+                    set status = 'FAILED', retryable = true, lease_owner = null, lease_until = null,
+                        error_code = 'APVERO_KNOWLEDGE_RETRY_EXHAUSTED', error_category = 'TRANSIENT',
+                        failure_metadata = '{}'::jsonb, completed_at = ?,
+                        lock_version = lock_version + 1, updated_at = ?
+                    where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                    """, timestamp(failedAt), timestamp(failedAt), scope.tenantId(), scope.workspaceId(),
+                    job.id(), job.lockVersion());
+            if (changed != 1) {
+                throw new IllegalStateException("APVERO_KNOWLEDGE_JOB_RECOVERY_CONFLICT");
+            }
+            return findJob(scope, job.id()).orElseThrow();
+        }).toList();
+    }
+
+    @Override
     public boolean hasActiveWebSnapshotJob(WorkspaceScope scope, UUID sourceId) {
         return Boolean.TRUE.equals(sql.fetchValue("""
                 select exists (
@@ -342,17 +423,22 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
             WorkspaceScope scope,
             UUID jobId,
             long expectedVersion,
+            String expectedLeaseOwner,
             UUID sourceRevisionId,
             OffsetDateTime updatedAt) {
         int changed = sql.execute("""
                 update knowledge_ingestion_job
                 set source_revision_id = ?, status = 'QUEUED', current_step = 'PARSING',
-                    sync_outcome = 'CHANGED', lock_version = lock_version + 1, updated_at = ?
+                    sync_outcome = 'CHANGED', attempt_count = 0, lease_owner = null, lease_until = null,
+                    lock_version = lock_version + 1, updated_at = ?
                 where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
                   and status in ('QUEUED', 'SNAPSHOTTING') and current_step = 'SNAPSHOTTING'
                   and job_kind in ('CREATE_SOURCE', 'SYNCHRONIZE_SOURCE')
+                  and ((? and lease_owner is null) or (not ? and lease_owner = ?))
+                  and (? or lease_until > ?)
                 """, sourceRevisionId, timestamp(updatedAt), scope.tenantId(), scope.workspaceId(), jobId,
-                expectedVersion);
+                expectedVersion, expectedLeaseOwner == null, expectedLeaseOwner == null, expectedLeaseOwner,
+                expectedLeaseOwner == null, timestamp(updatedAt));
         return changed == 1 ? findJob(scope, jobId) : Optional.empty();
     }
 
@@ -361,18 +447,125 @@ public class JooqKnowledgePersistenceRepository implements KnowledgePersistenceR
             WorkspaceScope scope,
             UUID jobId,
             long expectedVersion,
+            String expectedLeaseOwner,
             UUID sourceRevisionId,
             OffsetDateTime completedAt) {
         int changed = sql.execute("""
                 update knowledge_ingestion_job
                 set source_revision_id = ?, status = 'READY', current_step = 'COMPLETE',
                     sync_outcome = 'UNCHANGED', retryable = false, completed_at = ?,
+                    lease_owner = null, lease_until = null,
                     lock_version = lock_version + 1, updated_at = ?
                 where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
                   and status in ('QUEUED', 'SNAPSHOTTING') and current_step = 'SNAPSHOTTING'
                   and job_kind = 'SYNCHRONIZE_SOURCE'
+                  and ((? and lease_owner is null) or (not ? and lease_owner = ?))
+                  and (? or lease_until > ?)
                 """, sourceRevisionId, timestamp(completedAt), timestamp(completedAt), scope.tenantId(),
-                scope.workspaceId(), jobId, expectedVersion);
+                scope.workspaceId(), jobId, expectedVersion, expectedLeaseOwner == null,
+                expectedLeaseOwner == null, expectedLeaseOwner, expectedLeaseOwner == null,
+                timestamp(completedAt));
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> advanceJobToChunking(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            OffsetDateTime updatedAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set status = 'CHUNKING', current_step = 'CHUNKING',
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status = 'PARSING' and current_step = 'PARSING' and lease_owner = ?
+                  and lease_until > ?
+                """, timestamp(updatedAt), scope.tenantId(), scope.workspaceId(), jobId,
+                expectedVersion, expectedLeaseOwner, timestamp(updatedAt));
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> completeJob(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            OffsetDateTime completedAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set status = 'READY', current_step = 'COMPLETE', retryable = false,
+                    next_attempt_at = null, lease_owner = null, lease_until = null,
+                    error_code = null, error_category = null, failure_metadata = '{}'::jsonb,
+                    completed_at = ?, lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status = 'CHUNKING' and current_step = 'CHUNKING' and lease_owner = ?
+                  and lease_until > ?
+                """, timestamp(completedAt), timestamp(completedAt), scope.tenantId(), scope.workspaceId(),
+                jobId, expectedVersion, expectedLeaseOwner, timestamp(completedAt));
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> failJob(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            JobStatus status,
+            boolean retryable,
+            OffsetDateTime nextAttemptAt,
+            String errorCode,
+            ErrorCategory errorCategory,
+            OffsetDateTime failedAt) {
+        if (status != JobStatus.RETRY_WAIT && status != JobStatus.FAILED) {
+            throw new IllegalArgumentException("APVERO_KNOWLEDGE_JOB_FAILURE_STATUS_INVALID");
+        }
+        OffsetDateTime completedAt = status == JobStatus.FAILED ? failedAt : null;
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set status = ?, retryable = ?, next_attempt_at = ?,
+                    lease_owner = null, lease_until = null, error_code = ?, error_category = ?,
+                    failure_metadata = '{}'::jsonb, completed_at = ?,
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status in ('SNAPSHOTTING', 'PARSING', 'CHUNKING') and lease_owner = ?
+                  and lease_until > ?
+                """, status.name(), retryable, timestamp(nextAttemptAt), errorCode, errorCategory.name(),
+                timestamp(completedAt), timestamp(failedAt), scope.tenantId(), scope.workspaceId(), jobId,
+                expectedVersion, expectedLeaseOwner, timestamp(failedAt));
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> retryFailedJob(
+            WorkspaceScope scope, UUID jobId, long expectedVersion, OffsetDateTime updatedAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set status = 'QUEUED', attempt_count = 0, retryable = false,
+                    error_code = null, error_category = null, failure_metadata = '{}'::jsonb,
+                    cancellation_requested = false, completed_at = null,
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status = 'FAILED' and retryable = true and lease_owner is null
+                """, timestamp(updatedAt), scope.tenantId(), scope.workspaceId(), jobId, expectedVersion);
+        return changed == 1 ? findJob(scope, jobId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IngestionJobRow> cancelWaitingJob(
+            WorkspaceScope scope, UUID jobId, long expectedVersion, OffsetDateTime cancelledAt) {
+        int changed = sql.execute("""
+                update knowledge_ingestion_job
+                set status = 'CANCELLED', retryable = false, next_attempt_at = null,
+                    cancellation_requested = true, completed_at = ?,
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ? and lock_version = ?
+                  and status in ('QUEUED', 'RETRY_WAIT') and lease_owner is null
+                """, timestamp(cancelledAt), timestamp(cancelledAt), scope.tenantId(), scope.workspaceId(),
+                jobId, expectedVersion);
         return changed == 1 ? findJob(scope, jobId) : Optional.empty();
     }
 

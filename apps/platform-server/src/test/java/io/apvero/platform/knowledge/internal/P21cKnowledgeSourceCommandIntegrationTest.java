@@ -51,6 +51,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(webEnvironment = WebEnvironment.MOCK, properties = {
         "apvero.knowledge.enabled=true",
+        "apvero.knowledge.runner.enabled=false",
         "apvero.security.mode=enforced",
         "apvero.security.bootstrap-token=p21c-test-bootstrap"
 })
@@ -223,6 +224,45 @@ class P21cKnowledgeSourceCommandIntegrationTest {
                 .isInstanceOf(KnowledgeException.class)
                 .extracting(exception -> ((KnowledgeException) exception).code())
                 .isEqualTo("APVERO_KNOWLEDGE_SOURCE_TOMBSTONED");
+    }
+
+    @Test
+    void exposesScopedJobInspectionCancellationAndStableErrors() throws Exception {
+        WorkspaceScope owner = createScope("job-api-owner");
+        WorkspaceScope outsider = createScope("job-api-outsider");
+        KnowledgeBase base = bases.create(owner.workspaceId(),
+                new CreateKnowledgeBaseCommand(slug("job-api"), "Job API", ""), CONTEXT);
+        SourceIngestionReceipt source = sources.createInline(owner.workspaceId(), base.id(),
+                new CreateInlineKnowledgeSourceCommand(KnowledgeSource.Type.TEXT, "Queued", "content"), CONTEXT);
+
+        mvc.perform(get("/api/v1/knowledge-ingestion-jobs")
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, owner.workspaceId())
+                        .queryParam("status", "QUEUED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(source.job().id().toString()));
+        mvc.perform(get("/api/v1/knowledge-ingestion-jobs/{jobId}", source.job().id())
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, outsider.workspaceId()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("APVERO_KNOWLEDGE_JOB_NOT_FOUND"));
+        mvc.perform(get("/api/v1/knowledge-ingestion-jobs")
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, owner.workspaceId())
+                        .queryParam("status", "NOT_A_STATUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("APVERO_KNOWLEDGE_JOB_STATUS_INVALID"));
+
+        mvc.perform(post("/api/v1/knowledge-ingestion-jobs/{jobId}/cancel", source.job().id())
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, owner.workspaceId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(post("/api/v1/knowledge-ingestion-jobs/{jobId}/retry", source.job().id())
+                        .header("Authorization", ADMIN)
+                        .header(WORKSPACE_HEADER, owner.workspaceId()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("APVERO_KNOWLEDGE_JOB_NOT_RETRYABLE"));
     }
 
     @Test

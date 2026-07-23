@@ -4,7 +4,9 @@ import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.BaseRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.ChunkRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.DocumentRow;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.ErrorCategory;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.IngestionJobRow;
+import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.JobStatus;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.SourceRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.SourceRow;
 import java.util.List;
@@ -70,6 +72,17 @@ interface KnowledgePersistenceRepository {
 
     Optional<IngestionJobRow> findJob(WorkspaceScope scope, UUID jobId);
 
+    List<IngestionJobRow> listJobs(WorkspaceScope scope, UUID knowledgeBaseId, JobStatus status);
+
+    List<IngestionJobRow> claimJobs(
+            WorkspaceScope scope,
+            String leaseOwner,
+            OffsetDateTime claimedAt,
+            OffsetDateTime leaseUntil,
+            int limit);
+
+    List<IngestionJobRow> failExpiredExhaustedJobs(WorkspaceScope scope, OffsetDateTime failedAt);
+
     boolean hasActiveWebSnapshotJob(WorkspaceScope scope, UUID sourceId);
 
     Optional<IngestionJobRow> lockJob(WorkspaceScope scope, UUID jobId);
@@ -78,6 +91,7 @@ interface KnowledgePersistenceRepository {
             WorkspaceScope scope,
             UUID jobId,
             long expectedVersion,
+            String expectedLeaseOwner,
             UUID sourceRevisionId,
             OffsetDateTime updatedAt);
 
@@ -85,6 +99,39 @@ interface KnowledgePersistenceRepository {
             WorkspaceScope scope,
             UUID jobId,
             long expectedVersion,
+            String expectedLeaseOwner,
             UUID sourceRevisionId,
             OffsetDateTime completedAt);
+
+    Optional<IngestionJobRow> advanceJobToChunking(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            OffsetDateTime updatedAt);
+
+    Optional<IngestionJobRow> completeJob(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            OffsetDateTime completedAt);
+
+    Optional<IngestionJobRow> failJob(
+            WorkspaceScope scope,
+            UUID jobId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            JobStatus status,
+            boolean retryable,
+            OffsetDateTime nextAttemptAt,
+            String errorCode,
+            ErrorCategory errorCategory,
+            OffsetDateTime failedAt);
+
+    Optional<IngestionJobRow> retryFailedJob(
+            WorkspaceScope scope, UUID jobId, long expectedVersion, OffsetDateTime updatedAt);
+
+    Optional<IngestionJobRow> cancelWaitingJob(
+            WorkspaceScope scope, UUID jobId, long expectedVersion, OffsetDateTime cancelledAt);
 }

@@ -34,8 +34,22 @@ public class KnowledgeWebSnapshotCompletion {
             WorkspaceScope scope,
             UUID jobId,
             SafeWebCapture.CapturedWebSnapshot captured) {
+        return complete(scope, jobId, null, null, captured);
+    }
+
+    @Transactional
+    CompletionResult complete(
+            WorkspaceScope scope,
+            UUID jobId,
+            Long expectedVersion,
+            String expectedLeaseOwner,
+            SafeWebCapture.CapturedWebSnapshot captured) {
         IngestionJobRow job = repository.lockJob(scope, jobId)
                 .orElseThrow(() -> problem("APVERO_KNOWLEDGE_JOB_NOT_FOUND", Category.NOT_FOUND));
+        if (expectedVersion != null && (job.lockVersion() != expectedVersion
+                || !java.util.Objects.equals(job.leaseOwner(), expectedLeaseOwner))) {
+            throw problem("APVERO_KNOWLEDGE_JOB_LEASE_CONFLICT", Category.CONFLICT);
+        }
         if (!((job.status() == JobStatus.QUEUED || job.status() == JobStatus.SNAPSHOTTING)
                 && job.currentStep() == JobStep.SNAPSHOTTING)) {
             throw problem("APVERO_KNOWLEDGE_JOB_STATE_CONFLICT", Category.CONFLICT);
@@ -54,7 +68,7 @@ public class KnowledgeWebSnapshotCompletion {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         if (latest != null && latest.contentDigest().equals(snapshot.contentDigest())) {
             IngestionJobRow completed = repository.completeWebJobWithoutChange(
-                            scope, job.id(), job.lockVersion(), latest.id(), now)
+                            scope, job.id(), job.lockVersion(), expectedLeaseOwner, latest.id(), now)
                     .orElseThrow(() -> problem("APVERO_KNOWLEDGE_JOB_CONCURRENT_MODIFICATION", Category.CONFLICT));
             appendAudit(scope.workspaceId(), "knowledge.source.web-sync-unchanged", "knowledge-ingestion-job", job.id());
             return new CompletionResult(Outcome.UNCHANGED, source, latest, completed);
@@ -70,7 +84,7 @@ public class KnowledgeWebSnapshotCompletion {
                         scope, source.id(), source.version(), revisionNumber, revision.id(), now)
                 .orElseThrow(() -> problem("APVERO_KNOWLEDGE_SOURCE_CONCURRENT_MODIFICATION", Category.CONFLICT));
         IngestionJobRow advanced = repository.advanceWebJobAfterChangedSnapshot(
-                        scope, job.id(), job.lockVersion(), revision.id(), now)
+                        scope, job.id(), job.lockVersion(), expectedLeaseOwner, revision.id(), now)
                 .orElseThrow(() -> problem("APVERO_KNOWLEDGE_JOB_CONCURRENT_MODIFICATION", Category.CONFLICT));
         appendAudit(scope.workspaceId(), "knowledge.source.web-snapshot-captured",
                 "knowledge-source-revision", revision.id());

@@ -52,6 +52,15 @@ apvero:
     max-snapshot-bytes: ${APVERO_KNOWLEDGE_MAX_SNAPSHOT_BYTES:5242880}
     max-docx-entries: ${APVERO_KNOWLEDGE_MAX_DOCX_ENTRIES:2048}
     max-docx-expanded-bytes: ${APVERO_KNOWLEDGE_MAX_DOCX_EXPANDED_BYTES:20971520}
+    runner:
+      enabled: ${APVERO_KNOWLEDGE_RUNNER_ENABLED:true}
+      claim-batch: ${APVERO_KNOWLEDGE_RUNNER_CLAIM_BATCH:4}
+      concurrency: ${APVERO_KNOWLEDGE_RUNNER_CONCURRENCY:4}
+      lease-duration: ${APVERO_KNOWLEDGE_RUNNER_LEASE_DURATION:60s}
+      poll-interval: ${APVERO_KNOWLEDGE_RUNNER_POLL_INTERVAL:1s}
+      backoff-base: ${APVERO_KNOWLEDGE_RUNNER_BACKOFF_BASE:2s}
+      backoff-maximum: ${APVERO_KNOWLEDGE_RUNNER_BACKOFF_MAXIMUM:5m}
+      graceful-drain: ${APVERO_KNOWLEDGE_RUNNER_GRACEFUL_DRAIN:30s}
     web-capture:
       max-redirects: ${APVERO_KNOWLEDGE_WEB_MAX_REDIRECTS:5}
       max-header-bytes: ${APVERO_KNOWLEDGE_WEB_MAX_HEADER_BYTES:65536}

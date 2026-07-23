@@ -50,6 +50,18 @@ final class KnowledgeWebCaptureProcessor {
         return completion.complete(scope, jobId, captured);
     }
 
+    KnowledgeWebSnapshotCompletion.CompletionResult process(
+            WorkspaceScope scope, IngestionJobRow job, String leaseOwner) {
+        availability.requireEnabled();
+        SourceRow source = repository.findSource(scope, job.sourceId())
+                .orElseThrow(() -> problem("APVERO_KNOWLEDGE_SOURCE_NOT_FOUND", Category.NOT_FOUND));
+        if (source.sourceType() != SourceType.WEB || source.canonicalWebUri() == null) {
+            throw problem("APVERO_KNOWLEDGE_SOURCE_TYPE_CONFLICT", Category.CONFLICT);
+        }
+        SafeWebCapture.CapturedWebSnapshot captured = capture.capture(URI.create(source.canonicalWebUri()));
+        return completion.complete(scope, job.id(), job.lockVersion(), leaseOwner, captured);
+    }
+
     private static KnowledgeException problem(String code, Category category) {
         return new KnowledgeException(code, category);
     }
