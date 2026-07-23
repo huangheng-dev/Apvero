@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,7 +103,8 @@ class SafeWebCaptureTest {
             SafeWebCapture.WebAddressResolver resolver,
             SafeWebCapture.WebTransport transport) {
         KnowledgeProperties knowledge = new KnowledgeProperties(
-                true, URI.create("http://ai-worker:8090"), 1024, 1024, 8, 4096);
+                true, URI.create("http://ai-worker:8090"), Duration.ofSeconds(15), 20_971_520,
+                1024, 1024, 8, 4096);
         return new SafeWebCapture(knowledge, LIMITS, resolver, transport, new SimpleMeterRegistry());
     }
 

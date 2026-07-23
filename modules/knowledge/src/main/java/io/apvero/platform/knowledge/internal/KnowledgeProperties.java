@@ -1,6 +1,7 @@
 package io.apvero.platform.knowledge.internal;
 
 import java.net.URI;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -8,6 +9,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 record KnowledgeProperties(
         @DefaultValue("false") boolean enabled,
         @DefaultValue("http://ai-worker:8090") URI workerBaseUri,
+        @DefaultValue("15s") Duration workerReadTimeout,
+        @DefaultValue("20971520") int maxWorkerResponseBytes,
         @DefaultValue("5242880") int maxInlineCharacters,
         @DefaultValue("5242880") int maxSnapshotBytes,
         @DefaultValue("2048") int maxDocxEntries,
@@ -23,6 +26,10 @@ record KnowledgeProperties(
                 || workerBaseUri.getFragment() != null
                 || !(workerBaseUri.getPath().isEmpty() || "/".equals(workerBaseUri.getPath()))) {
             throw new IllegalArgumentException("APVERO_KNOWLEDGE_WORKER_BASE_URI_INVALID");
+        }
+        if (workerReadTimeout == null || workerReadTimeout.isNegative() || workerReadTimeout.isZero()
+                || maxWorkerResponseBytes < 1) {
+            throw new IllegalArgumentException("APVERO_KNOWLEDGE_WORKER_LIMIT_INVALID");
         }
         if (maxInlineCharacters < 1 || maxSnapshotBytes < 1) {
             throw new IllegalArgumentException("APVERO_KNOWLEDGE_SOURCE_LIMIT_INVALID");

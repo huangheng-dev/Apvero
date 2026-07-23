@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Duration;
 import java.net.http.HttpClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.health.contributor.Status;
@@ -58,7 +59,9 @@ class KnowledgeHealthIndicatorTest {
     }
 
     private KnowledgeProperties properties(boolean enabled, URI uri) {
-        return new KnowledgeProperties(enabled, uri, 5_242_880, 5_242_880, 2_048, 20_971_520);
+        return new KnowledgeProperties(
+                enabled, uri, Duration.ofSeconds(15), 20_971_520,
+                5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 
     private HttpServer serverRespondingWith(int status) throws Exception {

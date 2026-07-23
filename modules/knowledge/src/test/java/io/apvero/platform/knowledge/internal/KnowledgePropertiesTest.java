@@ -3,6 +3,7 @@ package io.apvero.platform.knowledge.internal;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class KnowledgePropertiesTest {
@@ -22,6 +23,8 @@ class KnowledgePropertiesTest {
     }
 
     private static KnowledgeProperties properties(boolean enabled, URI workerBaseUri) {
-        return new KnowledgeProperties(enabled, workerBaseUri, 5_242_880, 5_242_880, 2_048, 20_971_520);
+        return new KnowledgeProperties(
+                enabled, workerBaseUri, Duration.ofSeconds(15), 20_971_520,
+                5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 }

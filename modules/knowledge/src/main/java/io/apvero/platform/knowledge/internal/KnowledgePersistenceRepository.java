@@ -48,6 +48,8 @@ interface KnowledgePersistenceRepository {
 
     Optional<SourceRevisionRow> findRevision(WorkspaceScope scope, UUID revisionId);
 
+    Optional<SourceRevisionRow> lockRevision(WorkspaceScope scope, UUID revisionId);
+
     Optional<SourceRevisionRow> findLatestRevision(WorkspaceScope scope, UUID sourceId);
 
     List<SourceRevisionRow> listRevisions(WorkspaceScope scope, UUID sourceId);
@@ -56,9 +58,13 @@ interface KnowledgePersistenceRepository {
 
     Optional<DocumentRow> findDocument(WorkspaceScope scope, UUID documentId);
 
+    List<DocumentRow> listDocuments(WorkspaceScope scope, UUID sourceRevisionId);
+
     ChunkRow insertChunk(WorkspaceScope scope, ChunkRow row);
 
     Optional<ChunkRow> findChunk(WorkspaceScope scope, UUID chunkId);
+
+    List<ChunkRow> listChunks(WorkspaceScope scope, UUID sourceRevisionId);
 
     IngestionJobRow insertJob(WorkspaceScope scope, IngestionJobRow row);
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.apvero.platform.knowledge.KnowledgeDisabledException;
 import java.net.URI;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class DefaultKnowledgeAvailabilityTest {
@@ -30,6 +31,8 @@ class DefaultKnowledgeAvailabilityTest {
     }
 
     private static KnowledgeProperties properties(boolean enabled) {
-        return new KnowledgeProperties(enabled, WORKER_URI, 5_242_880, 5_242_880, 2_048, 20_971_520);
+        return new KnowledgeProperties(
+                enabled, WORKER_URI, Duration.ofSeconds(15), 20_971_520,
+                5_242_880, 5_242_880, 2_048, 20_971_520);
     }
 }
