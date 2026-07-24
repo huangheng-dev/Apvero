@@ -1486,7 +1486,7 @@ components:
       additionalProperties: false
       required: [dimension, maximumInputTokens, maximumBatchSize, normalization]
       properties:
-        dimension: { type: integer, minimum: 1, maximum: 65535 }
+        dimension: { type: integer, minimum: 1, maximum: 16000, description: pgvector vector storage dimension; returned vectors must also be finite and have non-zero norm for cosine ranking. }
         maximumInputTokens: { type: integer, minimum: 1, maximum: 2000000 }
         maximumBatchSize: { type: integer, minimum: 1, maximum: 4096 }
         normalization: { type: string, enum: [NONE, L2] }
@@ -1762,7 +1762,7 @@ components:
     KnowledgeIndexBuild:
       type: object
       additionalProperties: false
-      required: [id, tenantId, workspaceId, indexId, version, embeddingRouteId, status, sourceRevisionCount, chunkCount, vectorDimension, attemptCount, createdAt, updatedAt]
+      required: [id, tenantId, workspaceId, indexId, version, embeddingRouteId, embeddingRouteReference, status, sourceRevisionCount, chunkCount, vectorDimension, attemptCount, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
@@ -1770,11 +1770,11 @@ components:
         indexId: { type: string, format: uuid }
         version: { type: string }
         embeddingRouteId: { type: string, format: uuid }
-        embeddingRouteReference: { type: [string, "null"] }
+        embeddingRouteReference: { type: string, minLength: 3, maxLength: 240, pattern: "^.+@[1-9][0-9]*$", description: Exact existing Model Route identity using name@positive-integer. }
         status: { $ref: "#/components/schemas/KnowledgeIndexBuildStatus" }
         sourceRevisionCount: { type: integer, minimum: 1 }
         chunkCount: { type: integer, minimum: 0 }
-        vectorDimension: { type: integer, minimum: 1, maximum: 65535 }
+        vectorDimension: { type: integer, minimum: 1, maximum: 16000 }
         attemptCount: { type: integer, minimum: 0 }
         retryable: { type: boolean, default: false }
         validationDigest: { type: [string, "null"], pattern: "^sha256:[a-f0-9]{64}$" }
@@ -1786,7 +1786,7 @@ components:
     KnowledgeIndexVersion:
       type: object
       additionalProperties: false
-      required: [id, tenantId, workspaceId, indexId, buildId, version, reference, embeddingRouteVersion, vectorDimension, sourceRevisionCount, chunkCount, artifactDigest, status, publishedAt]
+      required: [id, tenantId, workspaceId, indexId, buildId, version, reference, embeddingRouteId, embeddingRouteReference, vectorDimension, sourceRevisionCount, chunkCount, artifactDigest, status, publishedAt]
       properties:
         id: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
@@ -1795,8 +1795,9 @@ components:
         buildId: { type: string, format: uuid }
         version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
         reference: { type: string, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
-        embeddingRouteVersion: { type: string, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
-        vectorDimension: { type: integer, minimum: 1, maximum: 65535 }
+        embeddingRouteId: { type: string, format: uuid }
+        embeddingRouteReference: { type: string, minLength: 3, maxLength: 240, pattern: "^.+@[1-9][0-9]*$", description: Exact existing Model Route identity using name@positive-integer. }
+        vectorDimension: { type: integer, minimum: 1, maximum: 16000 }
         sourceRevisionCount: { type: integer, minimum: 1 }
         chunkCount: { type: integer, minimum: 1 }
         artifactDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
@@ -1805,7 +1806,7 @@ components:
     RetrievalPolicyVersion:
       type: object
       additionalProperties: false
-      required: [id, tenantId, workspaceId, slug, version, reference, topK, maxContextTokens, minimumScore, overlapHandling, emptyEvidenceBehavior, createdAt]
+      required: [id, tenantId, workspaceId, slug, version, reference, topK, maxContextTokens, minimumScore, overlapHandling, retrievalAlgorithmVersion, tokenEstimatorVersion, retentionPolicyVersionAtPublish, policyDigest, emptyEvidenceBehavior, createdAt]
       properties:
         id: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
@@ -1817,11 +1818,16 @@ components:
         maxContextTokens: { type: integer, minimum: 128, maximum: 200000 }
         minimumScore: { type: number, minimum: 0, maximum: 1 }
         overlapHandling: { type: string, enum: [KEEP, COLLAPSE_ADJACENT] }
+        retrievalAlgorithmVersion: { type: string, maxLength: 120, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$", description: Platform-assigned supported retrieval algorithm identity. }
+        tokenEstimatorVersion: { type: string, maxLength: 120, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$", description: Platform-assigned deterministic context-budget estimator identity. }
+        retentionPolicyVersionAtPublish: { type: integer, format: int64, minimum: 1, description: Retention provenance only; current stricter disclosure policy always takes priority. }
+        policyDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
         emptyEvidenceBehavior: { type: string, const: NO_EVIDENCE }
         createdAt: { type: string, format: date-time }
     CreateRetrievalPolicyVersionRequest:
       type: object
       additionalProperties: false
+      description: Publishes an immutable policy. Apvero assigns the supported retrieval algorithm, token estimator, current retention provenance, and canonical policy digest.
       required: [slug, version, topK, maxContextTokens, minimumScore, overlapHandling]
       properties:
         slug: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }

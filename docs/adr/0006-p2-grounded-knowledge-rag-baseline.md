@@ -6,7 +6,9 @@
 - Target stage / 目标阶段: P2
 - Replaces / 替代: None / 无
 - Approval record / 批准记录: Maintainer approved ADR-0006 on 2026-07-22 / 维护者于 2026-07-22 批准 ADR-0006
-- Amendment record / 修订记录: Maintainer approved the P2.1 source-ingestion/index-build lifecycle correction on 2026-07-22 / 维护者于 2026-07-22 批准 P2.1 Source Ingestion 与 Index Build 生命周期勘误
+- Amendment record / 修订记录:
+  - Maintainer approved the P2.1 source-ingestion/index-build lifecycle correction on 2026-07-22 / 维护者于 2026-07-22 批准 P2.1 Source Ingestion 与 Index Build 生命周期勘误
+  - Maintainer approved the P2.2 Route-reference, pgvector-dimension, tombstone-retrieval, and Retrieval Policy reproducibility corrections on 2026-07-24 / 维护者于 2026-07-24 批准 P2.2 Route 引用、pgvector 维度、Tombstone 检索与 Retrieval Policy 可复现性勘误
 
 ## Decision summary / 决策摘要
 
@@ -35,6 +37,101 @@ The default deployment remains PostgreSQL 18 with pgvector as the only mandatory
 This ADR authorizes only the protected architecture and contract changes listed in the approved scope. P2.0 establishes authority and contract baselines; it does not add migrations, business implementation, or make a prototype page live.
 
 本 ADR 只授权“已批准范围”中列出的受保护架构与契约变化。P2.0 只建立权威文件和契约基线，不增加迁移、业务实现，也不把原型页面标记为真实功能。
+
+## P2.2 amendment: contract and reproducibility corrections / P2.2 修订：契约与可复现性勘误
+
+### Context / 背景
+
+The P2.2 pre-implementation review found four contradictions between the accepted intent, the
+contract-only OpenAPI, the implemented P1 route model, and pgvector's real storage boundary:
+
+P2.2 编码前审查发现：已批准意图、Contract-only OpenAPI、已实现的 P1 Route 模型与
+pgvector 真实存储边界之间存在四项矛盾：
+
+1. Model Routes already use immutable positive-integer versions and canonical `name@N` references,
+   while the Index Version contract required an Embedding Route semantic-version reference.
+2. The OpenAPI allowed 65,535 dimensions, while pgvector `vector` stores at most 16,000 dimensions.
+3. Tombstone was defined as future-build-only, but a later retrieval rule would filter current
+   tombstones and therefore mutate an old published Index Version's observable membership.
+4. Retrieval Policy omitted algorithm, token-estimator, retention provenance, and digest identity,
+   allowing a code upgrade to change an allegedly immutable policy.
+
+### Decision / 决策
+
+1. CHAT and EMBEDDING Model Routes remain one aggregate using the implemented positive-integer
+   version and canonical `name@N` reference. A Knowledge Index Version pins both the exact
+   Embedding Route ID and that canonical reference. Knowledge Index and Retrieval Policy references
+   continue to use semantic versions.
+2. P2 pgvector `vector` dimensions are limited to `1..16000`. Every stored and query vector must
+   match the pinned Build dimension, contain only finite values, and have non-zero norm for cosine
+   ranking. Different Builds may use different dimensions through an unconstrained `vector` column
+   plus row and composite Build constraints; P2.2 adds no ANN index.
+3. Source status is checked when the exact Build source set is created. Tombstoned Sources cannot
+   enter new Builds. Retrieval against an already published Index Version does not filter on the
+   Source's current tombstone state. Current authorization and retention/masking rules still apply
+   at read time. Legal erasure remains a separate explicit governance action that reports broken
+   reproducibility.
+4. Every published Retrieval Policy records a platform-assigned retrieval algorithm version, token
+   estimator version, retention-policy version at publication, and canonical policy digest. Clients
+   cannot submit arbitrary executable algorithm identities. Current stricter retention policy may
+   reduce historical disclosure but an older policy can never weaken it.
+
+1. CHAT 与 EMBEDDING Model Route 继续属于同一聚合，使用已实现的正整数版本与规范
+   `name@N` 引用。Knowledge Index Version 同时固定准确 Embedding Route ID 与该规范引用；
+   Knowledge Index 与 Retrieval Policy 引用继续使用语义版本。
+2. P2 pgvector `vector` 维度限制为 `1..16000`。每个存储向量与查询向量必须匹配固定 Build
+   Dimension、只包含有限数，并具有用于余弦排序的非零范数。不同 Build 可通过无固定维度的
+   `vector` Column 配合 Row/Composite Build Constraint 使用不同 Dimension；P2.2 不增加
+   ANN Index。
+3. 创建准确 Build Source Set 时检查 Source 状态；Tombstoned Source 不能进入新 Build。
+   检索已发布 Index Version 时不根据 Source 当前 Tombstone 状态过滤。读取时仍执行当前
+   Authorization 与 Retention/Masking Rule。法律永久清除继续属于独立、显式且会报告
+   可复现性破坏的 Governance Action。
+4. 每个已发布 Retrieval Policy 都记录平台分配的 Retrieval Algorithm Version、Token
+   Estimator Version、发布时 Retention Policy Version 与 Canonical Policy Digest。客户端
+   不能提交任意可执行算法标识；当前更严格的 Retention Policy 可以减少历史披露，旧 Policy
+   不能削弱它。
+
+### Alternatives and consequences / 替代方案与影响
+
+- A second semantic version system for Embedding Routes is rejected because it would give one Route
+  two incompatible identities and break the implemented P1 lineage.
+- A global fixed dimension is rejected because provider portability is an accepted invariant.
+- Filtering current tombstones from old versions is rejected because it silently mutates published
+  membership. Permanent erasure must be explicit instead.
+- Leaving algorithm identity implicit in application code is rejected because database immutability
+  would not produce behavioral reproducibility.
+
+- 拒绝为 Embedding Route 增加第二套语义版本，因为同一 Route 会出现两种冲突 Identity，
+  并破坏已实现 P1 血缘。
+- 拒绝全局固定 Dimension，因为 Provider 可移植性已经是获批不变量。
+- 拒绝从旧 Version 中按当前 Tombstone 过滤，因为这会静默改变已发布成员；永久清除必须显式。
+- 拒绝把算法 Identity 隐藏在应用代码中，因为数据库不可变不等于行为可复现。
+
+### Compatibility, migration, security, operability, and rollback / 兼容、迁移、安全、运维与回滚
+
+These are pre-implementation corrections to contract-only P2.2 fields; no live client or stored P2.2
+row is migrated. Existing P1 Route IDs, integer versions, CHAT releases, and Prompt versions are not
+rewritten. The separate Manifest 1.1 Model/Prompt reference compatibility finding remains a P2.3
+prerequisite and is not silently resolved by this amendment.
+
+这些是 P2.2 Contract-only 字段实施前勘误，不迁移 Live Client 或已存 P2.2 Row。现有 P1
+Route ID、整数版本、CHAT Release 与 Prompt Version 均不重写。Manifest 1.1 中独立的
+Model/Prompt 引用兼容问题继续作为 P2.3 前置事项，本修订不会静默处理它。
+
+The correction strengthens security and operations: workspace filters remain in the ranking SQL,
+current authorization and disclosure policy remain effective, unsupported dimensions fail before
+publication, and historical membership cannot change through an ordinary metadata mutation.
+Rollback reverts only contract/document changes before implementation. After implementation,
+additive migrations and disabled-by-default rollout follow the existing P2 rollback policy.
+Open-source users gain one canonical Route identity and an explicit supported vector envelope rather
+than provider- or deployment-dependent behavior.
+
+本勘误强化安全与运维：Workspace Filter 继续位于 Ranking SQL 内；当前 Authorization 与
+Disclosure Policy 继续生效；不支持的 Dimension 在发布前失败；普通元数据变更不能改变
+历史成员。实施前回滚只撤销契约/文档变更；实施后继续使用既有 P2 Additive Migration 与
+默认关闭策略。开源用户得到唯一规范 Route Identity 与明确 Vector 支持边界，不再依赖
+Provider 或部署环境的偶然行为。
 
 ## Context and current gaps / 背景与当前缺口
 
@@ -275,9 +372,14 @@ Workers claim small batches in short transactions with `FOR UPDATE SKIP LOCKED`,
 
 执行器使用 `FOR UPDATE SKIP LOCKED` 在短事务内领取小批量任务，持久化 `lease_owner`、`lease_until`、尝试次数、下次尝试时间、当前步骤和稳定错误码，然后在调用 Worker 或 Provider HTTP 前结束事务。外部调用期间不得保持数据库事务。
 
-Each step is idempotent from persisted inputs. Restart resumes from the last durable step. Duplicate delivery cannot create duplicate chunks, vectors, index versions, usage charges, or audit events.
+Each step is idempotent from persisted inputs. Restart resumes from the last durable step. Duplicate
+delivery cannot create duplicate chunks, vectors, index versions, Apvero ledger charges, or audit
+events. External provider dispatch ambiguity follows the reconciliation rule in the Governance
+section.
 
-每一步都必须能根据已持久化输入实现幂等。进程重启从最后一个持久步骤继续；重复领取不能产生重复 Chunk、向量、索引版本、费用或审计事件。
+每一步都必须能根据已持久化输入实现幂等。进程重启从最后一个持久步骤继续；重复领取不能产生
+重复 Chunk、向量、索引版本、Apvero Ledger Charge 或审计事件。外部 Provider Dispatch 的
+不确定结果遵守 Governance 章节的 Reconciliation Rule。
 
 ### Atomic publication / 原子发布
 
@@ -316,13 +418,24 @@ The default offline profile includes a clearly labeled deterministic development
 
 ### pgvector query / pgvector 查询
 
-- Store vectors using pgvector with a checked declared dimension for each build.
+- Store vectors using pgvector `vector` with a checked declared dimension of `1..16000` for each
+  build. Stored and query vectors contain only finite values, match the pinned dimension, and have
+  non-zero norm for cosine ranking.
 - Use exact cosine ranking for the initial supported corpus envelope.
-- Apply workspace, published-index-version, authorization, and non-tombstoned predicates before `ORDER BY distance LIMIT top_k` in the same SQL statement.
+- Apply workspace, published-index-version, and authorized-scope predicates before
+  `ORDER BY distance LIMIT top_k` in the same SQL statement.
+- Apply current Source tombstone state when selecting a new Build source set, not when retrieving
+  from an already published Index Version. Current authorization and retention/masking policy still
+  apply at read time.
 - Do not add ANN indexes until a measured corpus/performance threshold justifies the accuracy/operations trade-off.
 - Do not claim hybrid retrieval in P2. Locale-neutral vector retrieval is the baseline; English/Chinese lexical ranking requires a later measured design.
 
-首版使用精确余弦排序，避免在没有基准数据时过早引入 ANN 召回损失和运维复杂度。P2 也不宣称混合检索；英文/中文词法排序需要后续基于测量结果单独设计。
+首版使用 `1..16000` 维、有限数、非零范数的 pgvector `vector` 与精确余弦排序，避免在没有
+基准数据时过早引入 ANN 召回损失和运维复杂度。Workspace、Published Index Version 与
+Authorized Scope 必须在同一 Ranking SQL 的排序和限制前生效。Source 当前 Tombstone 只在
+选择新 Build Source Set 时判断，不能改变已发布 Index Version 的成员；读取时仍执行当前
+Authorization 与 Retention/Masking Policy。P2 也不宣称混合检索；英文/中文词法排序需要后续
+基于测量结果单独设计。
 
 ## Retrieval contract / 检索契约
 
@@ -335,7 +448,9 @@ An immutable `RetrievalPolicyVersion` defines at least:
 - deterministic tie-breaking;
 - duplicate/overlap handling;
 - empty-evidence behavior;
-- content-retention and masking reference.
+- platform-assigned retrieval algorithm and token-estimator versions;
+- retention-policy version at publication, with current stricter disclosure policy taking priority;
+- canonical policy digest.
 
 Knowledge exposes a provider-neutral public Java interface equivalent to:
 
@@ -377,7 +492,10 @@ CHAT | RAG
 
 - `CHAT` does not require Knowledge pins.
 - `RAG` requires one or more exact, authorized, `READY` Index Version references and exact Retrieval Policy Version references.
-- All new references use canonical semantic-versioned identifiers; `latest` is forbidden.
+- New P2 artifact references such as Knowledge Index and Retrieval Policy use canonical
+  semantic-versioned identifiers; `latest` is forbidden. Existing Model/Embedding Route references
+  retain their canonical positive-integer `name@N` identity. The separate Manifest Model/Prompt
+  compatibility correction remains a P2.3 prerequisite.
 - A complete JSON Schema validator replaces shallow field checks for new writes.
 - Manifest 1.0 remains readable during `0.x`; legacy shorthand references are normalized only in memory and old immutable rows are never rewritten.
 - Existing 1.0 releases execute with their historical CHAT behavior, even if they contain placeholder Knowledge strings.
@@ -434,6 +552,17 @@ Reservation components:
 Each component records exact route/version, estimated units/cost, actual units/cost, currency, admission decision, settlement status, and idempotency identity. Application budgets apply to Application executions; workspace/route budgets apply to ingestion and all model calls. A reservation must be persisted before any billable call and settled or released after every terminal path.
 
 每个组件记录准确路由/版本、预估与实际用量/成本、币种、准入决定、结算状态和幂等标识。Application 预算适用于应用执行；Workspace/Route 预算适用于摄取和所有模型调用。任何付费调用前必须先持久化预留，所有终止路径都必须结算或释放。
+
+Database uniqueness and idempotent settlement prevent duplicate Apvero ledger charges. They cannot
+make an external non-idempotent provider call exactly once. If dispatch occurred but no response was
+durably recorded, automatic retry is allowed only when the adapter declares provider-side
+idempotency and reuses the same identity. Otherwise the component fails with an explicit
+reconciliation-required outcome and does not risk a blind second paid call.
+
+数据库唯一性与幂等结算用于防止重复 Apvero Ledger Charge，但无法让外部非幂等 Provider
+天然 Exactly-once。若 Dispatch 已发生而 Response 未持久化，只有 Adapter 声明支持
+Provider-side Idempotency 且复用相同 Identity 时才允许自动重试；否则 Component 必须以明确的
+Reconciliation-required Outcome 失败，不能盲目再发一次付费调用。
 
 Knowledge requests embedding execution through the public capability facade and uses Governance public APIs for ingestion admission, reservation, settlement, audit, and retention decisions. Runtime continues to use the existing capability/execution facade for query embedding and chat generation. Governance remains the only owner of reservation and settlement tables; neither Knowledge nor Runtime writes them directly.
 

@@ -17,6 +17,25 @@ P2 is in progress. ADR-0006 is accepted. The contracts in this document are appr
 
 The existing Model Route contract keeps its live P1 CHAT request. P2 adds a `contract-only` EMBEDDING route variant with fixed dimension, maximum input tokens, maximum batch size, and normalization metadata. It remains the same provider-neutral Model Route aggregate rather than a second model system.
 
+## P2.2 approved contract correction
+
+The maintainer approved the P2.2 pre-implementation correction on 2026-07-24:
+
+1. CHAT and EMBEDDING Model Routes retain the existing immutable positive-integer version and
+   canonical `name@N` reference. `KnowledgeIndexVersion` pins both the exact Embedding Route ID and
+   that reference. Knowledge Index and Retrieval Policy references remain semantic versions.
+2. pgvector `vector` dimensions are limited to `1..16000`. Stored and query vectors must match the
+   pinned Build dimension, contain only finite values, and have non-zero norm for cosine ranking.
+3. Current Source tombstone state is checked when a new Build source set is selected. It is not a
+   retrieval-time filter for an already published Index Version. Current authorization and
+   retention/masking policy still apply at read time.
+4. A published Retrieval Policy includes platform-assigned retrieval-algorithm and token-estimator
+   versions, retention-policy version at publication, and a canonical policy digest. Current
+   stricter disclosure policy always takes priority over historical policy provenance.
+
+These are corrections to contract-only P2.2 fields; they migrate no live client or stored P2.2 row.
+The separate Manifest 1.1 Model/Prompt reference mismatch remains an explicit P2.3 prerequisite.
+
 ## Compatibility rules
 
 1. Manifest 1.0 remains readable and executes with historical CHAT behavior.
@@ -26,6 +45,10 @@ The existing Model Route contract keeps its live P1 CHAT request. P2 adds a `con
 5. Manifest 1.1 CHAT releases must contain no Knowledge binding.
 6. Integer shorthand such as `none@1` is legacy-only. Manifest 1.1 requires semantic-version references and forbids `latest`.
 7. Once a Manifest 1.1 RAG release exists, a P1-only runtime is below the supported rollback floor.
+
+Rule 6 describes the current contract-only Manifest 1.1 schema and does not redefine the existing
+Model Route or Prompt aggregates. P2.3 must reconcile that schema with their implemented integer
+version identities before Manifest 1.1 becomes live.
 
 ## Public workflow
 
