@@ -1,6 +1,6 @@
 # P2.2 不可变索引与检索实验室——实施计划
 
-状态：维护者已批准设计；第 3 节勘误于 2026-07-24 获批；尚未开始业务实施
+状态：维护者已批准设计；P2.2a 与 P2.2b 已实现；P2.2c 基线等待维护者审查
 
 目标阶段：P2，里程碑 P2.2
 
@@ -38,7 +38,7 @@ Run，也不会把 Knowledge 产品页面改为 Live。这些属于 P2.3 和 P2.
 
 | 项目 | P2.2 计划 |
 |---|---|
-| 阶段 | P2 / P2.2，当前为 `planned` |
+| 阶段 | P2 / P2.2，当前为 `in-progress` |
 | 主模块 | `knowledge` |
 | 支撑模块 | 仅通过公开 API 使用 `capability-registry`、`governance` 和 `identity` |
 | 允许依赖 | 仅 `knowledge -> identity, capability-registry, governance` |
