@@ -1,6 +1,6 @@
 # P2.2c Governed Embedding Execution — Implementation Baseline
 
-Status: proposed implementation baseline; no P2.2c business code has been written
+Status: maintainer-approved implementation baseline; P2.2c-1 implementation candidate
 
 Target: P2 / P2.2c
 

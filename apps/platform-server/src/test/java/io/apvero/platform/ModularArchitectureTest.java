@@ -36,11 +36,9 @@ class ModularArchitectureTest {
                     "com.anthropic..");
 
     @ArchTest
-    static final ArchRule EMBEDDING_PUBLIC_API_STAYS_PROVIDER_NEUTRAL = noClasses()
+    static final ArchRule CAPABILITY_PUBLIC_API_STAYS_AI_FRAMEWORK_NEUTRAL = noClasses()
             .that()
             .resideInAPackage("io.apvero.platform.capability")
-            .and()
-            .haveSimpleNameStartingWith("Embedding")
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage(
