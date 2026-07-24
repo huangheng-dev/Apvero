@@ -1,6 +1,6 @@
 # P2.2 Immutable Index and Retrieval Lab — Implementation Plan
 
-Status: maintainer-approved design; section 3 corrections approved on 2026-07-24; no business implementation started
+Status: maintainer-approved design; P2.2a and P2.2b implemented; P2.2c baseline under maintainer review
 
 Target stage: P2, milestone P2.2
 
@@ -39,7 +39,7 @@ reproducible ranking, and inspectable failure behavior.
 
 | Item | P2.2 plan |
 |---|---|
-| Stage | P2 / P2.2, currently `planned` |
+| Stage | P2 / P2.2, currently `in-progress` |
 | Primary module | `knowledge` |
 | Supporting modules | `capability-registry`, `governance`, and `identity` through existing public APIs |
 | Allowed dependencies | `knowledge -> identity, capability-registry, governance` only |
