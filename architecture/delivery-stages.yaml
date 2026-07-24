@@ -1,7 +1,7 @@
 schemaVersion: 1
 project: Apvero
 currentStage: P2
-lastReviewed: 2026-07-22
+lastReviewed: 2026-07-24
 
 statusValues: [completed, in-progress, planned]
 
@@ -99,10 +99,13 @@ stages:
           - contracts/openapi/ai-worker-internal.v1.yaml
       - id: P2.1
         name: Durable ingestion spine
-        status: in-progress
+        status: completed
         planningEvidence:
           - docs/en/p2-1-implementation-plan.md
           - docs/zh-CN/p2-1-implementation-plan.md
+        verificationEvidence:
+          - docs/en/p2-1-acceptance.md
+          - docs/zh-CN/p2-1-acceptance.md
       - id: P2.2
         name: Immutable index and Retrieval Lab
         status: planned

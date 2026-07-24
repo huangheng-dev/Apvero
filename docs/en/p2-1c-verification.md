@@ -64,4 +64,9 @@ If source capture needs immediate containment without a binary rollback, disable
 
 ## Not delivered
 
-P2.1c does not implement web capture (P2.1d), worker parsing/chunking (P2.1e), durable job execution and operations (P2.1f), embedding, indexing, retrieval, Application binding, Release, or grounded Run. The WEB Source route returns a stable not-available error rather than claiming success. Product prototype pages remain explicitly demo-only. P2 and P2.1 remain `in-progress`, and P2 REST contracts remain `contract-only` until the full stage exit gates pass.
+At this checkpoint, P2.1c did not implement web capture (P2.1d), worker parsing/chunking
+(P2.1e), durable job execution and operations (P2.1f), embedding, indexing, retrieval,
+Application binding, Release, or grounded Run. The WEB Source route returned a stable
+not-available error rather than claiming success. Product prototype pages remained explicitly
+demo-only. P2 and P2.1 therefore remained `in-progress`, and P2 REST contracts remained
+`contract-only`.

@@ -1,12 +1,14 @@
 # P2.1d Safe Web Capture Verification
 
-Status: merged implementation checkpoint; overall P2.1 acceptance remains pending.
+Status: merged implementation checkpoint; included in the accepted P2.1 milestone.
 
 ## Delivered boundary
 
 P2.1d adds the approved public-web Source path without introducing another deployable, framework, queue, or stateful dependency. A web Source stores its canonical locator as protected write-only metadata and creates a persisted `SNAPSHOTTING` ingestion job with no revision. A resynchronization request creates another persisted snapshot job.
 
-The Java Knowledge module owns fetching. The Python Worker never receives or resolves a URL. P2.1f will own leasing, retries, cancellation, restart recovery, and automatic invocation of this handler.
+The Java Knowledge module owns fetching. The Python Worker never receives or resolves a URL.
+P2.1f owns leasing, retries, cancellation, restart recovery, and automatic invocation of this
+handler.
 
 ## Network safety
 

@@ -66,7 +66,7 @@ P1 已在 P2 成为当前阶段前验收关闭。其控制继续作为所有 P2 
 
 ADR-0006 已批准。P2.0 获批的兼容规则、公开 API、Schema 与内部 Worker 基线记录在 [`p2-contract-baseline.md`](p2-contract-baseline.md)。这些 P2 契约在对应实现切片通过验证前，继续明确保持 `contract-only`。
 
-P2.1 正在实施。P2.1a 建立物理 Knowledge 模块、默认拒绝的启用与 Health、Worker 私有部署边界，以及版本化 Parser 候选语料/决策。P2.1b 增加六张带 Scope 的摄取表、由数据库强制执行的不可变血缘，以及必须接收 Tenant/Workspace Scope 的 Repository。P2.1c 闭合 Base 与非 Web Source 的编写流程，包括不可变 Revision、排队 Job、Audit、No-op 识别、内容读取和 Tombstone。P2.1d 已交付受保护的网页 Source 调度、固定地址 SSRF 防护、有界采集、安全元数据持久化和 Changed/Unchanged 同步。P2.1e 覆盖五种格式的有界 Worker 解析/切块契约、严格的 Java 响应校验，以及不可变 Document 与 Chunk 的事务化幂等持久化。P2.1f 已形成实现候选，覆盖按 Scope 的租约执行、过期恢复、有界重试、真实取消、Job 查看、低基数遥测和优雅关闭。Knowledge 仍默认关闭；检索、产品 Live 激活及 P2 Exit Gate 仍属于后续工作。
+P2.1 已于 2026-07-24 验收。它交付物理 Knowledge 模块、默认拒绝的启用与 Health、Worker 私有部署、六张带 Scope 的不可变摄取表、安全的 Inline/Upload/Web Capture、五种格式的确定性解析与切块、持久化租约执行、重启恢复、有界重试、真实取消、检查、重新同步、Tombstone、Audit 与低基数遥测。候选 PR #10 和合并后的 `main` 运行均通过完整 CI，其中包括隔离的五类来源与重启恢复 Compose 闭环。P2 继续进行：Knowledge 默认保持关闭且为 `contract-only`，P2.2 开始实现不可变索引与 Retrieval Lab。
 
 业务链路：
 

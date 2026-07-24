@@ -1,6 +1,6 @@
 # P2.1f 持久化摄取 Runner 验证
 
-状态：实施候选，不代表完整 P2 功能已经可用。
+状态：已验收的 P2.1 实施检查点，不代表完整 P2 功能已经可用。
 
 ## 已交付边界
 
@@ -99,4 +99,5 @@ Tenant、Workspace、Source、Revision、Job、URL、文件名和内容都不会
 ./gradlew test check
 ```
 
-只有 CI 证据全部通过且维护者批准本阶段切片后，P2.1f 才可验收。
+该证据已在候选 PR #10 与合并后的 `main` 运行中通过。维护者于 2026-07-24
+验收 P2.1。P2 继续进行，P2 REST Surface 继续保持 `contract-only`。

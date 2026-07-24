@@ -55,4 +55,6 @@ If V8 migration itself fails, Flyway and PostgreSQL transactional DDL leave V8 u
 
 ## Not delivered
 
-P2.1b does not implement P2.1c source commands, P2.1d safe web capture, P2.1e production worker processing, or P2.1f durable execution and operations. P2 and P2.1 remain `in-progress`; all P2 REST contracts remain `contract-only`.
+At this checkpoint, P2.1b did not implement P2.1c source commands, P2.1d safe web capture,
+P2.1e production worker processing, or P2.1f durable execution and operations. P2 and P2.1
+therefore remained `in-progress`; all P2 REST contracts remained `contract-only`.

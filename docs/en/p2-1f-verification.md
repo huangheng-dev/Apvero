@@ -1,6 +1,6 @@
 # P2.1f durable ingestion runner verification
 
-Status: implementation candidate, not a complete P2 feature claim.
+Status: accepted P2.1 implementation checkpoint, not a complete P2 feature claim.
 
 ## Delivered boundary
 
@@ -100,4 +100,5 @@ Required command:
 ./gradlew test check
 ```
 
-P2.1f is accepted only after this evidence is green in CI and the maintainer approves the stage slice.
+This evidence passed on candidate PR #10 and the resulting `main` run. The maintainer accepted
+P2.1 on 2026-07-24. P2 remains in progress and the P2 REST surface remains `contract-only`.
