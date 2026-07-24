@@ -1,6 +1,6 @@
 # P2.1e Worker Processing Verification
 
-Status: merged implementation checkpoint; overall P2.1 acceptance remains pending.
+Status: merged implementation checkpoint; included in the accepted P2.1 milestone.
 
 ## Delivered boundary
 

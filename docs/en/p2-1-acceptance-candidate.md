@@ -1,9 +1,9 @@
 # P2.1 Acceptance Candidate
 
-Status: verification hardening implemented; remote CI and maintainer acceptance are still required.
+Status: accepted on 2026-07-24; retained as the candidate evidence record.
 
-Stage state is intentionally unchanged: P2 and P2.1 remain `in-progress`, Knowledge remains
-disabled by default, and every P2 REST operation remains `contract-only`.
+After acceptance, P2.1 is `completed` while P2 remains `in-progress`. Knowledge remains disabled
+by default, and every P2 REST operation remains `contract-only`.
 
 ## Closed audit gaps
 
@@ -19,11 +19,12 @@ disabled by default, and every P2 REST operation remains `contract-only`.
 | Operations | A Logback capture test proves raw exception content, URL credentials, and document text do not enter runner logs |
 | Deployment | The Knowledge Compose overlay makes Platform Server depend on Worker health; CI starts the stack with `--wait`, checks recovery, prints evidence, and removes volumes |
 
-## Required acceptance evidence
+## Acceptance evidence obtained
 
-Before changing `architecture/delivery-stages.yaml`, all jobs in the candidate pull request and
-the resulting `main` run must be green, including the new `knowledge-compose` job. The maintainer
-then reviews this evidence and explicitly approves the P2.1 transition.
+All jobs passed on candidate PR #10 and on the resulting `main` merge commit
+`f259de456aa9e902b82ad84460e6fd6185a0a289`, including the new `knowledge-compose` job.
+The maintainer then explicitly approved the P2.1 transition. The final evidence map is recorded
+in [`p2-1-acceptance.md`](p2-1-acceptance.md).
 
 Local isolated Compose verification completed successfully without touching the maintainer's
 default Apvero stack or volume. It processed text, Markdown, PDF, DOCX, and public HTML through

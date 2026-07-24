@@ -64,4 +64,8 @@ P2.1c 不增加数据库迁移，也不修改已批准的 Invariant 或公共契
 
 ## 尚未交付
 
-P2.1c 不实现 Web Capture（P2.1d）、Worker Parsing/Chunking（P2.1e）、Durable Job Execution and Operations（P2.1f）、Embedding、索引、检索、Application Binding、Release 或 Grounded Run。WEB Source 路由返回稳定的 Not-available 错误，不伪造成功。产品 Prototype 页面继续明确为 Demo-only。P2 与 P2.1 继续为 `in-progress`，P2 REST Contract 在完整阶段 Exit Gate 通过前继续为 `contract-only`。
+在该检查点，P2.1c 尚未实现 Web Capture（P2.1d）、Worker Parsing/Chunking（P2.1e）、
+Durable Job Execution and Operations（P2.1f）、Embedding、索引、检索、Application
+Binding、Release 或 Grounded Run。WEB Source 路由返回稳定的 Not-available 错误，
+不伪造成功。产品 Prototype 页面继续明确为 Demo-only。因此当时 P2 与 P2.1 继续为
+`in-progress`，P2 REST Contract 继续为 `contract-only`。

@@ -1,8 +1,8 @@
 # P2.1 验收候选
 
-状态：验收补强已经实现；仍需远程 CI 和维护者验收。
+状态：已于 2026-07-24 验收；本文件作为候选证据记录保留。
 
-阶段状态有意保持不变：P2 与 P2.1 继续为 `in-progress`，Knowledge 默认继续关闭，
+验收后 P2.1 为 `completed`，P2 继续为 `in-progress`。Knowledge 默认继续关闭，
 全部 P2 REST 操作继续为 `contract-only`。
 
 ## 已关闭的审计缺口
@@ -19,10 +19,12 @@
 | 运维 | Logback 捕获测试证明原始异常内容、URL 凭证和文档文本不会进入 Runner 日志 |
 | 部署 | Knowledge Compose Overlay 让 Platform Server 依赖 Worker 健康状态；CI 使用 `--wait` 启动、验证恢复、输出证据并删除测试 Volume |
 
-## 验收前仍需的证据
+## 已取得的验收证据
 
-修改 `architecture/delivery-stages.yaml` 前，候选 PR 和合并后的 `main` 必须全部为绿色，
-其中包括新增的 `knowledge-compose` Job。之后由维护者审查证据并明确批准 P2.1 状态迁移。
+候选 PR #10 与合并后的 `main` Commit
+`f259de456aa9e902b82ad84460e6fd6185a0a289` 全部 Job 均通过，其中包括新增的
+`knowledge-compose`。随后维护者明确批准 P2.1 状态迁移。最终证据映射记录在
+[`p2-1-acceptance.md`](p2-1-acceptance.md)。
 
 本机隔离 Compose 验证已经成功完成，且没有修改维护者默认的 Apvero Stack 或 Volume。
 文本、Markdown、PDF、DOCX 和公开网页 HTML 均通过真实 Platform Server 与 Worker

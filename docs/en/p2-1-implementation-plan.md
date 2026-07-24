@@ -1,6 +1,6 @@
 # P2.1 Durable Ingestion Spine — Implementation Plan
 
-Status: maintainer-approved plan; implementation is in progress and this document does not authorize deviations from the approved slices
+Status: maintainer-approved plan; P2.1 accepted on 2026-07-24
 
 Target stage: P2, milestone P2.1
 
@@ -29,7 +29,7 @@ P2.1 does not produce embeddings, indices, retrieval results, Application bindin
 
 | Item | P2.1 decision |
 |---|---|
-| Stage | P2 / P2.1, currently planned |
+| Stage | P2 / P2.1, accepted |
 | Primary module | New physical `knowledge` module |
 | Supporting modules | `identity` and `governance`; no Application, Release, or Runtime dependency |
 | Allowed dependencies | Declared: `knowledge -> identity, capability-registry, governance`; actually exercised in P2.1: `identity`, `governance` only |

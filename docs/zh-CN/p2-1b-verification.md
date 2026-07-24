@@ -55,4 +55,6 @@ V8 是增量迁移，不提供破坏性 Down Migration。在任何 P2 API 或 RA
 
 ## 尚未交付
 
-P2.1b 不实现 P2.1c Source Command、P2.1d Safe Web Capture、P2.1e 生产 Worker Processing 或 P2.1f Durable Execution and Operations。P2 与 P2.1 继续为 `in-progress`，所有 P2 REST Contract 继续为 `contract-only`。
+在该检查点，P2.1b 尚未实现 P2.1c Source Command、P2.1d Safe Web Capture、P2.1e
+生产 Worker Processing 或 P2.1f Durable Execution and Operations。因此当时 P2 与
+P2.1 继续为 `in-progress`，所有 P2 REST Contract 继续为 `contract-only`。
