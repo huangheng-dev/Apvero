@@ -116,7 +116,10 @@ public class DefaultCapabilityCatalog implements CapabilityCatalog {
     @Override
     @Transactional
     public ModelRoute createRoute(UUID workspaceId, String name, UUID modelId, int timeoutMs, int maxOutputTokens, BigDecimal temperature) {
-        requireModel(workspaceId, modelId);
+        ModelDefinition model = requireModel(workspaceId, modelId);
+        if (!model.capabilities().contains("CHAT")) {
+            throw new IllegalArgumentException("APVERO_MODEL_ROUTE_CAPABILITY_MISMATCH");
+        }
         if (name == null || name.isBlank() || name.length() > 160) throw new IllegalArgumentException("Route name is required.");
         if (timeoutMs < 1000 || timeoutMs > 300000) throw new IllegalArgumentException("Route timeout must be between 1000 and 300000 ms.");
         if (maxOutputTokens < 1 || maxOutputTokens > 200000) throw new IllegalArgumentException("Maximum output tokens are out of range.");

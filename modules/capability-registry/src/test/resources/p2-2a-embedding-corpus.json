@@ -1,0 +1,62 @@
+[
+  {
+    "id": "empty",
+    "category": "empty",
+    "text": "",
+    "expectedUnits": 1
+  },
+  {
+    "id": "whitespace",
+    "category": "whitespace",
+    "text": " \t\n",
+    "expectedUnits": 3
+  },
+  {
+    "id": "english",
+    "category": "en",
+    "text": "Hello, Apvero.",
+    "expectedUnits": 14
+  },
+  {
+    "id": "simplified-chinese",
+    "category": "zh-CN",
+    "text": "你好，Apvero。",
+    "expectedUnits": 18
+  },
+  {
+    "id": "mixed-language",
+    "category": "mixed",
+    "text": "RAG 检索 v2",
+    "expectedUnits": 13
+  },
+  {
+    "id": "emoji-and-accent",
+    "category": "unicode",
+    "text": "AI 🤖 café",
+    "expectedUnits": 13
+  },
+  {
+    "id": "combining-sequence",
+    "category": "unicode",
+    "text": "é vs é",
+    "expectedUnits": 9
+  },
+  {
+    "id": "format-characters",
+    "category": "adversarial-unicode",
+    "text": "​⁠﻿",
+    "expectedUnits": 9
+  },
+  {
+    "id": "long-unbroken-token",
+    "category": "long-token",
+    "text": "aaaaaaaaaaaaaaaa",
+    "expectedUnits": 16
+  },
+  {
+    "id": "windows-line-ending",
+    "category": "line-ending",
+    "text": "line1\r\nline2",
+    "expectedUnits": 12
+  }
+]
