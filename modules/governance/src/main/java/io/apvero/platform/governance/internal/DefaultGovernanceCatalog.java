@@ -220,9 +220,11 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
         UUID reservationId = UUID.randomUUID();
         sql.insertInto(table("execution_reservation"))
                 .columns(field("id"), field("tenant_id"), field("workspace_id"), field("application_id"),
-                        field("model_route_id"), field("actor_id"), field("trace_id"),
+                        field("subject_type"), field("subject_id"), field("model_route_id"),
+                        field("actor_id"), field("trace_id"),
                         field("estimated_cost_micros"), field("status"), field("created_at"))
-                .values(reservationId, scope.tenantId(), workspaceId, applicationId, modelRouteId,
+                .values(reservationId, scope.tenantId(), workspaceId, applicationId,
+                        "APPLICATION_RUN", applicationId, modelRouteId,
                         safe(actorId, "system"), traceId, estimatedCostMicros, "RESERVED", now)
                 .execute();
         RetentionPolicy retention = get(workspaceId);

@@ -19,8 +19,8 @@ modules:
 
   - id: capability-registry
     status: baseline
-    implementedOwns: [model-provider, model, model-route, prompt, prompt-version, model-route-readiness, execution-governance-facade]
-    plannedOwns: [embedding-route-metadata, tool, mcp-server, memory-provider, evaluator, guardrail]
+    implementedOwns: [model-provider, model, model-route, prompt, prompt-version, model-route-readiness, embedding-route-metadata, execution-governance-facade]
+    plannedOwns: [tool, mcp-server, memory-provider, evaluator, guardrail]
     publicApi: io.apvero.platform.capability
     databaseTables: [model_provider, model_definition, model_route, prompt_asset, prompt_version]
 
@@ -43,11 +43,11 @@ modules:
     status: in-progress
     implementationStatus: contract-only
     approvedBy: ADR-0006
-    implementedOwns: [knowledge-base, knowledge-source, source-revision, document, chunk, ingestion-job]
-    plannedOwns: [retrieval-policy-version, knowledge-index, index-build, immutable-index-version, retrieval-service]
+    implementedOwns: [knowledge-base, knowledge-source, source-revision, document, chunk, ingestion-job, retrieval-policy-version, knowledge-index, index-build, immutable-index-version]
+    plannedOwns: [retrieval-service]
     publicApi: io.apvero.platform.knowledge
-    databaseTables: [knowledge_base, knowledge_source, knowledge_source_revision, knowledge_document, knowledge_chunk, knowledge_ingestion_job]
-    plannedDatabaseTables: [retrieval_policy_version, knowledge_index, knowledge_index_build, knowledge_index_build_revision, knowledge_index_entry, knowledge_index_version]
+    databaseTables: [knowledge_base, knowledge_source, knowledge_source_revision, knowledge_document, knowledge_chunk, knowledge_ingestion_job, retrieval_policy_version, knowledge_index, knowledge_index_build, knowledge_index_build_revision, knowledge_index_entry, knowledge_index_version]
+    plannedDatabaseTables: []
 
   - id: evaluation
     status: planned
@@ -56,11 +56,11 @@ modules:
 
   - id: governance
     status: baseline
-    implementedOwns: [secret-reference, budget-policy, rate-limit, execution-reservation, audit-event, retention-policy]
-    plannedOwns: [execution-subject, execution-reservation-component]
+    implementedOwns: [secret-reference, budget-policy, rate-limit, execution-reservation, execution-subject, execution-reservation-component, audit-event, retention-policy]
+    plannedOwns: []
     publicApi: io.apvero.platform.governance
-    databaseTables: [secret_reference, budget_policy, rate_limit_counter, execution_reservation, audit_event, retention_policy]
-    plannedDatabaseTables: [execution_reservation_component]
+    databaseTables: [secret_reference, budget_policy, rate_limit_counter, execution_reservation, execution_reservation_component, audit_event, retention_policy]
+    plannedDatabaseTables: []
 
   - id: extension
     status: planned
