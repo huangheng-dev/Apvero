@@ -108,10 +108,13 @@ stages:
           - docs/zh-CN/p2-1-acceptance.md
       - id: P2.2
         name: Immutable index and Retrieval Lab
-        status: planned
+        status: in-progress
         planningEvidence:
           - docs/en/p2-2-implementation-plan.md
           - docs/zh-CN/p2-2-implementation-plan.md
+        sliceEvidence:
+          - docs/en/p2-2a-verification.md
+          - docs/zh-CN/p2-2a-verification.md
       - id: P2.3
         name: Application to cited Run closure
         status: planned

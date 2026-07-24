@@ -72,8 +72,8 @@ class P21bKnowledgePersistenceIntegrationTest {
     @Test
     void cleanMigrationCreatesTheSixScopedTablesIndexesAndTriggers() {
         assertThat(sql.queryForObject(
-                "select version from flyway_schema_history where success order by installed_rank desc limit 1",
-                String.class)).isEqualTo("8");
+                "select count(*) from flyway_schema_history where version = '8' and success",
+                Integer.class)).isEqualTo(1);
 
         Integer tableCount = sql.queryForObject("""
                 select count(*)
@@ -129,14 +129,15 @@ class P21bKnowledgePersistenceIntegrationTest {
             assertThat(toV7.migrate().migrationsExecuted).isEqualTo(7);
             assertThat(toV7.info().current().getVersion().getVersion()).isEqualTo("7");
 
-            Flyway toHead = Flyway.configure()
+            Flyway toV8 = Flyway.configure()
                     .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                     .schemas(schema)
                     .defaultSchema(schema)
                     .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("8"))
                     .load();
-            assertThat(toHead.migrate().migrationsExecuted).isEqualTo(1);
-            assertThat(toHead.info().current().getVersion().getVersion()).isEqualTo("8");
+            assertThat(toV8.migrate().migrationsExecuted).isEqualTo(1);
+            assertThat(toV8.info().current().getVersion().getVersion()).isEqualTo("8");
 
             try (Connection connection = DriverManager.getConnection(
                     POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {

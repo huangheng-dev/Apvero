@@ -36,6 +36,21 @@ class ModularArchitectureTest {
                     "com.anthropic..");
 
     @ArchTest
+    static final ArchRule EMBEDDING_PUBLIC_API_STAYS_PROVIDER_NEUTRAL = noClasses()
+            .that()
+            .resideInAPackage("io.apvero.platform.capability")
+            .and()
+            .haveSimpleNameStartingWith("Embedding")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "org.springframework.ai..",
+                    "dev.langchain4j..",
+                    "com.alibaba.cloud.ai..",
+                    "com.openai..",
+                    "com.anthropic..");
+
+    @ArchTest
     static final ArchRule MODULE_INTERNALS_STAY_PRIVATE = noClasses()
             .that()
             .resideOutsideOfPackages(
@@ -77,4 +92,20 @@ class ModularArchitectureTest {
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage("io.apvero.platform.knowledge.internal..");
+
+    @ArchTest
+    static final ArchRule CAPABILITY_INTERNALS_STAY_PRIVATE = noClasses()
+            .that()
+            .resideOutsideOfPackage("io.apvero.platform.capability..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("io.apvero.platform.capability.internal..");
+
+    @ArchTest
+    static final ArchRule GOVERNANCE_INTERNALS_STAY_PRIVATE = noClasses()
+            .that()
+            .resideOutsideOfPackage("io.apvero.platform.governance..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("io.apvero.platform.governance.internal..");
 }
