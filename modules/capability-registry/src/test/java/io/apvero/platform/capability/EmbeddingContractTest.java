@@ -83,6 +83,34 @@ class EmbeddingContractTest {
                 .hasMessage("APVERO_EMBEDDING_USAGE_INCONSISTENT");
     }
 
+    @Test
+    void quotePinsTheExactRouteCostAndReplayDecision() {
+        EmbeddingRouteSnapshot route = route();
+        EmbeddingExecutionQuote quote = new EmbeddingExecutionQuote(
+                route, 1_024, 8, "USD", EmbeddingReplayPolicy.SAFE_REPLAY);
+
+        assertThat(quote.route()).isSameAs(route);
+        assertThat(quote.estimatedInputUnits()).isEqualTo(1_024);
+        assertThat(quote.estimatedCostMicros()).isEqualTo(8);
+        assertThat(quote.currency()).isEqualTo("USD");
+        assertThat(quote.replayPolicy()).isEqualTo(EmbeddingReplayPolicy.SAFE_REPLAY);
+        assertThat(EmbeddingReplayPolicy.DEFAULT)
+                .isEqualTo(EmbeddingReplayPolicy.RECONCILIATION_REQUIRED);
+
+        assertThatThrownBy(() -> new EmbeddingExecutionQuote(
+                route, 0, 0, "USD", EmbeddingReplayPolicy.RECONCILIATION_REQUIRED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("APVERO_EMBEDDING_ESTIMATED_UNITS_INVALID");
+    }
+
+    private EmbeddingRouteSnapshot route() {
+        return new EmbeddingRouteSnapshot(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "quick-start-embedding", 1,
+                UUID.randomUUID(), ModelRouteCapability.EMBEDDING, ModelRouteStatus.PUBLISHED,
+                30_000, new EmbeddingRouteProfile(256, 8_192, 64, EmbeddingNormalization.L2),
+                true, "READY", OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
     private EmbeddingExecutionResult result(List<EmbeddingVectorOutput> outputs) {
         return new EmbeddingExecutionResult(
                 UUID.randomUUID(), "quick-start-embedding@1", UUID.randomUUID(), "local-model", 2,

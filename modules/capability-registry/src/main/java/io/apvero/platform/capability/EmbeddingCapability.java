@@ -5,5 +5,7 @@ import java.util.UUID;
 public interface EmbeddingCapability {
     EmbeddingRouteSnapshot resolveEmbeddingRoute(UUID workspaceId, UUID routeId);
 
+    EmbeddingExecutionQuote quote(UUID workspaceId, UUID routeId, long estimatedInputUnits);
+
     EmbeddingExecutionResult embed(EmbeddingExecutionRequest request);
 }

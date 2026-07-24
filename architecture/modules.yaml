@@ -19,7 +19,7 @@ modules:
 
   - id: capability-registry
     status: baseline
-    implementedOwns: [model-provider, model, model-route, prompt, prompt-version, model-route-readiness, embedding-route-metadata, execution-governance-facade]
+    implementedOwns: [model-provider, model, model-route, prompt, prompt-version, model-route-readiness, embedding-route-metadata, embedding-execution-quote, deterministic-embedding-adapter, execution-governance-facade]
     plannedOwns: [tool, mcp-server, memory-provider, evaluator, guardrail]
     publicApi: io.apvero.platform.capability
     databaseTables: [model_provider, model_definition, model_route, prompt_asset, prompt_version]
