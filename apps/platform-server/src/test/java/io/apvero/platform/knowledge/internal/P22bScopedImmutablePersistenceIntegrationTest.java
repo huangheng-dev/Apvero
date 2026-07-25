@@ -20,6 +20,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.AfterAll;
@@ -59,6 +62,7 @@ class P22bScopedImmutablePersistenceIntegrationTest {
     }
 
     @Autowired KnowledgeIndexPersistenceRepository repository;
+    @Autowired KnowledgeEmbeddingEntryBatchWriter batchWriter;
     @Autowired JdbcTemplate sql;
     @Autowired TransactionTemplate transactions;
 
@@ -173,6 +177,90 @@ class P22bScopedImmutablePersistenceIntegrationTest {
     }
 
     @Test
+    void embeddingEntryBatchRollsBackCompletelyWhenOneEntryViolatesPersistenceConstraints() {
+        Fixture fixture = createFixture("atomic-batch");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        IndexRow index = repository.insertIndex(fixture.scope(), new IndexRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                fixture.baseId(), "atomic-index", "Atomic Index", IndexStatus.ACTIVE,
+                1, 0, null, now, now));
+        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+                fixture, index.id(), "1.0.0", digest('1'), digest('2'), now));
+        repository.insertBuildRevision(
+                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+        UUID secondChunkId = UUID.randomUUID();
+        sql.update("""
+                insert into knowledge_chunk(
+                    id, tenant_id, workspace_id, source_revision_id, document_id, ordinal,
+                    text, content_digest, start_offset, end_offset, chunker_version, created_at)
+                values (?, ?, ?, ?, ?, 1, 'second', ?, 10, 16, 'apvero-boundary@1.0.0', ?)
+                """, secondChunkId, fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                fixture.revisionId(), fixture.documentId(), digest('3'), now);
+
+        EntryRow first = new EntryRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
+                fixture.revisionId(), fixture.documentId(), fixture.chunkId(), 0,
+                List.of(1.0F, 0.5F, 0.25F), 3, digest('4'), digest('5'), 0,
+                fixture.routeId(), fixture.routeReference(), now);
+        EntryRow invalidSecond = new EntryRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
+                fixture.revisionId(), fixture.documentId(), secondChunkId, 1,
+                List.of(0.25F, 0.5F, 1.0F), 3, "invalid-vector-digest", digest('6'), 0,
+                fixture.routeId(), fixture.routeReference(), now);
+
+        assertThatThrownBy(() -> batchWriter.persist(
+                fixture.scope(), build.id(), List.of(first, invalidSecond)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_ENTRY_BATCH_CONFLICT");
+        assertThat(repository.listEntries(fixture.scope(), build.id())).isEmpty();
+    }
+
+    @Test
+    void concurrentEqualEmbeddingBatchesSerializeToOneDurableEntry() throws Exception {
+        Fixture fixture = createFixture("concurrent-batch");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        IndexRow index = repository.insertIndex(fixture.scope(), new IndexRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                fixture.baseId(), "concurrent-index", "Concurrent Index", IndexStatus.ACTIVE,
+                1, 0, null, now, now));
+        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+                fixture, index.id(), "1.0.0", digest('7'), digest('8'), now));
+        repository.insertBuildRevision(
+                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+        EntryRow entry = new EntryRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
+                fixture.revisionId(), fixture.documentId(), fixture.chunkId(), 0,
+                List.of(1.0F, 0.5F, 0.25F), 3, digest('9'), digest('a'), 0,
+                fixture.routeId(), fixture.routeReference(), now);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome> call = () -> {
+                ready.countDown();
+                start.await();
+                return batchWriter.persist(fixture.scope(), build.id(), List.of(entry));
+            };
+            Future<KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome> first = executor.submit(call);
+            Future<KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome> second = executor.submit(call);
+            ready.await();
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get()))
+                    .containsExactlyInAnyOrder(
+                            KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome.INSERTED,
+                            KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome.ALREADY_PRESENT);
+        }
+        assertThat(repository.listEntries(fixture.scope(), build.id()))
+                .singleElement()
+                .extracting(EntryRow::id)
+                .isEqualTo(entry.id());
+    }
+
+    @Test
     void repositoriesFailClosedAcrossScopesAndPersistExactLineageAndVectorShape() {
         Fixture fixture = createFixture("scoped");
         WorkspaceScope otherScope = createScope("other");
@@ -208,6 +296,7 @@ class P22bScopedImmutablePersistenceIntegrationTest {
         assertThat(repository.findPolicy(otherScope, policy.id())).isEmpty();
         assertThat(repository.findIndex(otherScope, index.id())).isEmpty();
         assertThat(repository.findBuild(otherScope, build.id())).isEmpty();
+        assertThat(repository.lockBuild(otherScope, build.id())).isEmpty();
         assertThat(repository.listBuildRevisions(otherScope, build.id())).isEmpty();
         assertThat(repository.listEntries(otherScope, build.id())).isEmpty();
 

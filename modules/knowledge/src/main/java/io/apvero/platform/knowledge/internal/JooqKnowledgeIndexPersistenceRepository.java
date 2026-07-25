@@ -170,6 +170,14 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public Optional<BuildRow> lockBuild(WorkspaceScope scope, UUID buildId) {
+        return sql.fetchOptional(BUILD_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and id = ? for update",
+                        scope.tenantId(), scope.workspaceId(), buildId)
+                .map(this::mapBuild);
+    }
+
+    @Override
     public BuildRevisionRow insertBuildRevision(WorkspaceScope scope, BuildRevisionRow row) {
         requireScope(scope, row.tenantId(), row.workspaceId());
         sql.execute("""
