@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":modules:governance"))
     api(libs.spring.modulith.api)
     implementation(libs.spring.ai.model)
+    implementation(libs.spring.ai.openai)
     implementation(libs.spring.boot.webmvc)
     implementation(libs.spring.boot.validation)
     implementation(libs.spring.boot.jooq)
