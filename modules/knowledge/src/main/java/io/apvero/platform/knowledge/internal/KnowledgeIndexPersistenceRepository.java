@@ -24,6 +24,8 @@ interface KnowledgeIndexPersistenceRepository {
 
     Optional<BuildRow> findBuild(WorkspaceScope scope, UUID buildId);
 
+    Optional<BuildRow> lockBuild(WorkspaceScope scope, UUID buildId);
+
     BuildRevisionRow insertBuildRevision(WorkspaceScope scope, BuildRevisionRow row);
 
     List<BuildRevisionRow> listBuildRevisions(WorkspaceScope scope, UUID buildId);
