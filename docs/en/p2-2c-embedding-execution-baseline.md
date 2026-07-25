@@ -1,6 +1,6 @@
 # P2.2c Governed Embedding Execution — Implementation Baseline
 
-Status: maintainer-approved implementation baseline; P2.2c-1 implementation candidate
+Status: implemented and verified; accepted on 2026-07-25
 
 Target: P2 / P2.2c
 
