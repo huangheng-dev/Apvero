@@ -9,11 +9,25 @@ public record ExecutionComponentSettlement(
         long actualUnits,
         long actualCostMicros,
         String currency,
+        ExecutionUsageQuality usageQuality,
         boolean succeeded,
         String failureCode) {
 
+    public ExecutionComponentSettlement(
+            UUID reservationId,
+            String idempotencyIdentity,
+            long actualUnits,
+            long actualCostMicros,
+            String currency,
+            boolean succeeded,
+            String failureCode) {
+        this(reservationId, idempotencyIdentity, actualUnits, actualCostMicros, currency,
+                ExecutionUsageQuality.ACTUAL, succeeded, failureCode);
+    }
+
     public ExecutionComponentSettlement {
         Objects.requireNonNull(reservationId, "APVERO_EXECUTION_RESERVATION_ID_REQUIRED");
+        Objects.requireNonNull(usageQuality, "APVERO_EXECUTION_USAGE_QUALITY_REQUIRED");
         if (idempotencyIdentity == null
                 || idempotencyIdentity.isBlank()
                 || idempotencyIdentity.length() > 200) {

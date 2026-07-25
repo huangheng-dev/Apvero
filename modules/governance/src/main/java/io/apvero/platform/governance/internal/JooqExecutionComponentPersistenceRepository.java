@@ -60,6 +60,18 @@ class JooqExecutionComponentPersistenceRepository
     }
 
     @Override
+    public Optional<ExecutionComponentPersistenceRecord> findByIdentity(
+            WorkspaceScope scope, UUID reservationId, String idempotencyIdentity) {
+        return sql.fetchOptional(SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ?
+                           and reservation_id = ? and idempotency_identity = ?
+                         """, scope.tenantId(), scope.workspaceId(), reservationId,
+                        idempotencyIdentity)
+                .map(this::map);
+    }
+
+    @Override
     public List<ExecutionComponentPersistenceRecord> listByReservation(
             WorkspaceScope scope, UUID reservationId) {
         return sql.fetch(SELECT
@@ -68,6 +80,152 @@ class JooqExecutionComponentPersistenceRepository
                          order by created_at, id
                          """, scope.tenantId(), scope.workspaceId(), reservationId)
                 .map(this::map);
+    }
+
+    @Override
+    public ExecutionComponentPersistenceRecord markDispatched(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            String providerRequestIdentity,
+            OffsetDateTime now) {
+        ExecutionComponentPersistenceRecord current =
+                lock(scope, reservationId, idempotencyIdentity);
+        if (!"RESERVED".equals(current.status()) && !"DISPATCHED".equals(current.status())) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_DISPATCH_CONFLICT");
+        }
+        String storedIdentity = current.providerRequestIdentity();
+        if (storedIdentity != null
+                && providerRequestIdentity != null
+                && !storedIdentity.equals(providerRequestIdentity)) {
+            throw conflict("APVERO_EXECUTION_PROVIDER_IDENTITY_CONFLICT");
+        }
+        String effectiveIdentity = storedIdentity == null ? providerRequestIdentity : storedIdentity;
+        if ("RESERVED".equals(current.status())) {
+            sql.execute("""
+                    update execution_reservation_component
+                    set status = 'DISPATCHED', provider_request_identity = ?,
+                        dispatched_at = ?, updated_at = ?
+                    where tenant_id = ? and workspace_id = ? and reservation_id = ?
+                      and idempotency_identity = ? and status = 'RESERVED'
+                    """, effectiveIdentity, timestamp(now), timestamp(now), scope.tenantId(),
+                    scope.workspaceId(), reservationId, idempotencyIdentity);
+        } else if (storedIdentity == null && effectiveIdentity != null) {
+            sql.execute("""
+                    update execution_reservation_component
+                    set provider_request_identity = ?, updated_at = ?
+                    where tenant_id = ? and workspace_id = ? and reservation_id = ?
+                      and idempotency_identity = ? and status = 'DISPATCHED'
+                      and provider_request_identity is null
+                    """, effectiveIdentity, timestamp(now), scope.tenantId(), scope.workspaceId(),
+                    reservationId, idempotencyIdentity);
+        }
+        return findByIdentity(scope, reservationId, idempotencyIdentity).orElseThrow();
+    }
+
+    @Override
+    public ExecutionComponentPersistenceRecord settle(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            long actualUnits,
+            long actualCostMicros,
+            String currency,
+            String usageQuality,
+            boolean succeeded,
+            String failureCode,
+            OffsetDateTime now) {
+        ExecutionComponentPersistenceRecord current =
+                lock(scope, reservationId, idempotencyIdentity);
+        String targetStatus = succeeded ? "SUCCEEDED" : "FAILED";
+        if (!currency.equals(current.currency())) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
+        }
+        if (targetStatus.equals(current.status())) {
+            if (equalsSettlement(current, actualUnits, actualCostMicros, currency,
+                    usageQuality, failureCode)) {
+                return current;
+            }
+            throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
+        }
+        if (!"DISPATCHED".equals(current.status())) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
+        }
+        int changed = sql.execute("""
+                update execution_reservation_component
+                set status = ?, actual_units = ?, actual_cost_micros = ?, currency = ?,
+                    usage_quality = ?, failure_code = ?, settled_at = ?, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and reservation_id = ?
+                  and idempotency_identity = ? and status = 'DISPATCHED'
+                """, targetStatus, actualUnits, actualCostMicros, currency, usageQuality,
+                failureCode, timestamp(now), timestamp(now), scope.tenantId(), scope.workspaceId(),
+                reservationId, idempotencyIdentity);
+        if (changed != 1) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
+        }
+        return findByIdentity(scope, reservationId, idempotencyIdentity).orElseThrow();
+    }
+
+    @Override
+    public ExecutionComponentPersistenceRecord requireReconciliation(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            String failureCode,
+            OffsetDateTime now) {
+        ExecutionComponentPersistenceRecord current =
+                lock(scope, reservationId, idempotencyIdentity);
+        if ("RECONCILIATION_REQUIRED".equals(current.status())) {
+            if (failureCode.equals(current.failureCode())) {
+                return current;
+            }
+            throw conflict("APVERO_EXECUTION_COMPONENT_RECONCILIATION_CONFLICT");
+        }
+        if (!"DISPATCHED".equals(current.status())) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_RECONCILIATION_CONFLICT");
+        }
+        int changed = sql.execute("""
+                update execution_reservation_component
+                set status = 'RECONCILIATION_REQUIRED', failure_code = ?, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and reservation_id = ?
+                  and idempotency_identity = ? and status = 'DISPATCHED'
+                """, failureCode, timestamp(now), scope.tenantId(), scope.workspaceId(),
+                reservationId, idempotencyIdentity);
+        if (changed != 1) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_RECONCILIATION_CONFLICT");
+        }
+        return findByIdentity(scope, reservationId, idempotencyIdentity).orElseThrow();
+    }
+
+    private ExecutionComponentPersistenceRecord lock(
+            WorkspaceScope scope, UUID reservationId, String idempotencyIdentity) {
+        return sql.fetchOptional(SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ?
+                           and reservation_id = ? and idempotency_identity = ?
+                         for update
+                         """, scope.tenantId(), scope.workspaceId(), reservationId,
+                        idempotencyIdentity)
+                .map(this::map)
+                .orElseThrow(() -> conflict("APVERO_EXECUTION_COMPONENT_NOT_FOUND"));
+    }
+
+    private static boolean equalsSettlement(
+            ExecutionComponentPersistenceRecord current,
+            long actualUnits,
+            long actualCostMicros,
+            String currency,
+            String usageQuality,
+            String failureCode) {
+        return Long.valueOf(actualUnits).equals(current.actualUnits())
+                && Long.valueOf(actualCostMicros).equals(current.actualCostMicros())
+                && currency.equals(current.currency())
+                && usageQuality.equals(current.usageQuality())
+                && java.util.Objects.equals(failureCode, current.failureCode());
+    }
+
+    private static IllegalStateException conflict(String code) {
+        return new IllegalStateException(code);
     }
 
     private ExecutionComponentPersistenceRecord map(Record record) {

@@ -3,25 +3,24 @@ package io.apvero.platform.governance;
 import java.util.Objects;
 import java.util.UUID;
 
-public record ExecutionComponentDispatch(
+public record ExecutionComponentReconciliation(
         UUID reservationId,
         String idempotencyIdentity,
-        String providerRequestIdentity) {
+        String failureCode) {
 
-    public ExecutionComponentDispatch {
+    public ExecutionComponentReconciliation {
         Objects.requireNonNull(reservationId, "APVERO_EXECUTION_RESERVATION_ID_REQUIRED");
         if (idempotencyIdentity == null
                 || idempotencyIdentity.isBlank()
                 || idempotencyIdentity.length() > 200) {
             throw new IllegalArgumentException("APVERO_EXECUTION_COMPONENT_IDEMPOTENCY_INVALID");
         }
-        if (providerRequestIdentity != null
-                && (providerRequestIdentity.isBlank() || providerRequestIdentity.length() > 240)) {
-            throw new IllegalArgumentException("APVERO_EXECUTION_PROVIDER_REQUEST_IDENTITY_INVALID");
+        if (failureCode == null
+                || failureCode.isBlank()
+                || failureCode.length() > 120
+                || !failureCode.matches("^APVERO_[A-Z0-9_]+$")) {
+            throw new IllegalArgumentException("APVERO_EXECUTION_COMPONENT_FAILURE_CODE_INVALID");
         }
         idempotencyIdentity = idempotencyIdentity.trim();
-        if (providerRequestIdentity != null) {
-            providerRequestIdentity = providerRequestIdentity.trim();
-        }
     }
 }

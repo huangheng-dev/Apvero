@@ -19,7 +19,7 @@ public record ExecutionReservationRequest(
         if (actorId == null || actorId.isBlank() || actorId.length() > 160) {
             throw new IllegalArgumentException("APVERO_EXECUTION_ACTOR_INVALID");
         }
-        if (traceId == null || traceId.isBlank() || traceId.length() > 200) {
+        if (traceId == null || traceId.isBlank() || traceId.length() > 80) {
             throw new IllegalArgumentException("APVERO_EXECUTION_TRACE_INVALID");
         }
         components = List.copyOf(Objects.requireNonNull(

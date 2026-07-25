@@ -128,6 +128,19 @@ class ExecutionGovernanceCompatibilityTest {
         assertThatThrownBy(overflow::estimatedCostMicros)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("APVERO_EXECUTION_COMPONENT_COST_OVERFLOW");
+
+        assertThatThrownBy(() -> new ExecutionReservationRequest(
+                UUID.randomUUID(),
+                ExecutionSubject.knowledgeQuery(UUID.randomUUID()),
+                "actor",
+                "x".repeat(81),
+                List.of(component)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("APVERO_EXECUTION_TRACE_INVALID");
+        assertThatThrownBy(() -> new ExecutionComponentReconciliation(
+                UUID.randomUUID(), "query-1:embedding", "unsafe-provider-error"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("APVERO_EXECUTION_COMPONENT_FAILURE_CODE_INVALID");
     }
 
     private static final class CapturingGovernance implements ExecutionGovernance {
