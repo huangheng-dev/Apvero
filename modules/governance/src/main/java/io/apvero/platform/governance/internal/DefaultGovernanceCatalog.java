@@ -11,7 +11,14 @@ import io.apvero.platform.governance.BudgetPolicyCatalog;
 import io.apvero.platform.governance.BudgetScopeType;
 import io.apvero.platform.governance.CreateBudgetPolicyCommand;
 import io.apvero.platform.governance.ExecutionAdmission;
+import io.apvero.platform.governance.ExecutionComponentDispatch;
+import io.apvero.platform.governance.ExecutionComponentReconciliation;
+import io.apvero.platform.governance.ExecutionComponentRequest;
+import io.apvero.platform.governance.ExecutionComponentSettlement;
+import io.apvero.platform.governance.ExecutionComponentType;
 import io.apvero.platform.governance.ExecutionGovernance;
+import io.apvero.platform.governance.ExecutionReservationRequest;
+import io.apvero.platform.governance.ExecutionSubjectType;
 import io.apvero.platform.governance.RateLimitExceededException;
 import io.apvero.platform.governance.RetentionPolicy;
 import io.apvero.platform.governance.RetentionPolicyCatalog;
@@ -21,8 +28,14 @@ import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.identity.WorkspaceScopeCatalog;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.jooq.DSLContext;
 import org.jooq.JSONB;
 import org.springframework.stereotype.Service;
@@ -39,13 +52,15 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     private final WorkspaceScopeCatalog workspaces;
     private final ObjectMapper json;
     private final PolicyDecisionAudit policyAudit;
+    private final ExecutionComponentPersistenceRepository components;
 
     public DefaultGovernanceCatalog(DSLContext sql, WorkspaceScopeCatalog workspaces, ObjectMapper json,
-            PolicyDecisionAudit policyAudit) {
+            PolicyDecisionAudit policyAudit, ExecutionComponentPersistenceRepository components) {
         this.sql = sql;
         this.workspaces = workspaces;
         this.json = json;
         this.policyAudit = policyAudit;
+        this.components = components;
     }
 
     @Override
@@ -195,7 +210,8 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                         returning request_count
                         """, policy.id(), minute).get("request_count", Integer.class);
                 if (count > policy.requestsPerMinute()) {
-                    policyAudit.denied(scope.tenantId(), workspaceId, applicationId, actorId, traceId,
+                    policyAudit.denied(scope.tenantId(), workspaceId, applicationId, "APPLICATION_RUN",
+                            actorId, traceId,
                             "RATE_LIMIT_EXCEEDED");
                     throw new RateLimitExceededException();
                 }
@@ -211,7 +227,8 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                         """, workspaceId, month, policy.scopeType().name(), policy.scopeType().name(), applicationId,
                         policy.scopeType().name(), modelRouteId).get(0, Long.class);
                 if (consumed + estimatedCostMicros > policy.monthlyCostLimitMicros()) {
-                    policyAudit.denied(scope.tenantId(), workspaceId, applicationId, actorId, traceId,
+                    policyAudit.denied(scope.tenantId(), workspaceId, applicationId, "APPLICATION_RUN",
+                            actorId, traceId,
                             "BUDGET_EXCEEDED");
                     throw new BudgetExceededException();
                 }
@@ -229,6 +246,80 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                 .execute();
         RetentionPolicy retention = get(workspaceId);
         return new ExecutionAdmission(reservationId, retention.retainPayloads(), retention.maskSensitiveFields());
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ExecutionAdmission admit(ExecutionReservationRequest request) {
+        WorkspaceScope scope = workspaces.require(request.workspaceId());
+        sql.fetch("select pg_advisory_xact_lock(hashtextextended(?, 0))",
+                request.workspaceId().toString());
+        sql.fetch("select pg_advisory_xact_lock(hashtextextended(?, 1))", request.traceId());
+        validateRoutes(scope, request.components());
+        UUID existingReservationId = findIdempotentReservation(scope, request);
+        if (existingReservationId != null) {
+            return admission(existingReservationId, request.workspaceId());
+        }
+        if (sql.fetchExists(sql.selectOne()
+                .from(table("execution_reservation"))
+                .where(field("trace_id", String.class).eq(request.traceId())))) {
+            throw conflict("APVERO_EXECUTION_RESERVATION_IDEMPOTENCY_CONFLICT");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        evaluateComponentPolicies(scope, request, now);
+        UUID reservationId = UUID.randomUUID();
+        UUID applicationId = request.subject().type() == ExecutionSubjectType.APPLICATION_RUN
+                ? request.subject().id() : null;
+        UUID representativeRouteId = request.components().getFirst().modelRouteId();
+        sql.insertInto(table("execution_reservation"))
+                .columns(field("id"), field("tenant_id"), field("workspace_id"),
+                        field("application_id"), field("subject_type"), field("subject_id"),
+                        field("model_route_id"), field("actor_id"), field("trace_id"),
+                        field("estimated_cost_micros"), field("status"), field("created_at"))
+                .values(reservationId, scope.tenantId(), scope.workspaceId(), applicationId,
+                        request.subject().type().name(), request.subject().id(),
+                        representativeRouteId, request.actorId(), request.traceId(),
+                        request.estimatedCostMicros(), "RESERVED", now)
+                .execute();
+        for (ExecutionComponentRequest component : request.components()) {
+            components.insert(scope, new ExecutionComponentPersistenceRecord(
+                    UUID.randomUUID(), scope.tenantId(), scope.workspaceId(), reservationId,
+                    component.type().name(), component.modelRouteId(),
+                    component.modelRouteReference(), component.idempotencyIdentity(),
+                    component.estimatedUnits(), null, null, component.estimatedCostMicros(),
+                    null, component.currency(), "RESERVED", null, null, null, null, now, now));
+        }
+        return admission(reservationId, request.workspaceId());
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markDispatched(ExecutionComponentDispatch dispatch) {
+        WorkspaceScope scope = scopeForReservation(dispatch.reservationId());
+        components.markDispatched(scope, dispatch.reservationId(),
+                dispatch.idempotencyIdentity(), dispatch.providerRequestIdentity(),
+                OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void settle(ExecutionComponentSettlement settlement) {
+        WorkspaceScope scope = scopeForReservation(settlement.reservationId());
+        components.settle(scope, settlement.reservationId(), settlement.idempotencyIdentity(),
+                settlement.actualUnits(), settlement.actualCostMicros(), settlement.currency(),
+                settlement.usageQuality().name(), settlement.succeeded(), settlement.failureCode(),
+                OffsetDateTime.now(ZoneOffset.UTC));
+        aggregateParent(scope, settlement.reservationId());
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void requireReconciliation(ExecutionComponentReconciliation reconciliation) {
+        WorkspaceScope scope = scopeForReservation(reconciliation.reservationId());
+        components.requireReconciliation(scope, reconciliation.reservationId(),
+                reconciliation.idempotencyIdentity(), reconciliation.failureCode(),
+                OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     @Override
@@ -272,13 +363,290 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     @Override
     @Transactional
     public int reconcileStaleReservationsBefore(OffsetDateTime cutoff) {
-        return sql.update(table("execution_reservation"))
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int reconciliationRequired = sql.execute("""
+                update execution_reservation_component
+                set status = 'RECONCILIATION_REQUIRED',
+                    failure_code = 'APVERO_EXECUTION_STALE_DISPATCH',
+                    updated_at = ?::timestamptz
+                where status = 'DISPATCHED' and updated_at < ?::timestamptz
+                """, now, cutoff);
+        int legacyFailed = sql.update(table("execution_reservation"))
                 .set(field("status"), "FAILED")
                 .set(field("actual_cost_micros"), 0L)
-                .set(field("settled_at"), OffsetDateTime.now(ZoneOffset.UTC))
+                .set(field("settled_at"), now)
                 .where(field("status", String.class).eq("RESERVED")
-                        .and(field("created_at", OffsetDateTime.class).lt(cutoff)))
+                        .and(field("created_at", OffsetDateTime.class).lt(cutoff))
+                        .andNotExists(sql.selectOne()
+                                .from(table("execution_reservation_component"))
+                                .where(field("execution_reservation_component.reservation_id",
+                                        UUID.class).eq(field("execution_reservation.id", UUID.class)))))
                 .execute();
+        return reconciliationRequired + legacyFailed;
+    }
+
+    private void validateRoutes(WorkspaceScope scope, List<ExecutionComponentRequest> requested) {
+        for (ExecutionComponentRequest component : requested) {
+            String requiredCapability = component.type() == ExecutionComponentType.CHAT_GENERATION
+                    ? "CHAT" : "EMBEDDING";
+            Integer count = sql.fetchOne("""
+                    select count(*)
+                    from model_route route
+                    join model_definition model
+                      on model.id = route.model_id
+                     and model.tenant_id = route.tenant_id
+                     and model.workspace_id = route.workspace_id
+                    join model_provider provider
+                      on provider.id = model.provider_id
+                     and provider.tenant_id = model.tenant_id
+                     and provider.workspace_id = model.workspace_id
+                    where route.tenant_id = ? and route.workspace_id = ? and route.id = ?
+                      and route.name || '@' || route.version = ?
+                      and route.route_capability = ? and route.status = 'PUBLISHED'
+                      and model.enabled and provider.enabled
+                    """, scope.tenantId(), scope.workspaceId(), component.modelRouteId(),
+                    component.modelRouteReference(), requiredCapability).get(0, Integer.class);
+            if (count == null || count != 1) {
+                throw new IllegalArgumentException("APVERO_EXECUTION_COMPONENT_ROUTE_INVALID");
+            }
+        }
+    }
+
+    private UUID findIdempotentReservation(
+            WorkspaceScope scope, ExecutionReservationRequest request) {
+        Set<UUID> reservationIds = new HashSet<>();
+        for (ExecutionComponentRequest component : request.components()) {
+            reservationIds.addAll(sql.fetch("""
+                    select distinct reservation_id
+                    from execution_reservation_component
+                    where tenant_id = ? and workspace_id = ? and idempotency_identity = ?
+                    """, scope.tenantId(), scope.workspaceId(), component.idempotencyIdentity())
+                    .getValues("reservation_id", UUID.class));
+        }
+        if (reservationIds.isEmpty()) {
+            return null;
+        }
+        if (reservationIds.size() != 1) {
+            throw conflict("APVERO_EXECUTION_RESERVATION_IDEMPOTENCY_CONFLICT");
+        }
+        UUID reservationId = reservationIds.iterator().next();
+        var reservation = sql.fetchOptional("""
+                select subject_type, subject_id, actor_id, trace_id
+                from execution_reservation
+                where tenant_id = ? and workspace_id = ? and id = ?
+                for update
+                """, scope.tenantId(), scope.workspaceId(), reservationId)
+                .orElseThrow(() -> conflict("APVERO_EXECUTION_RESERVATION_IDEMPOTENCY_CONFLICT"));
+        List<ExecutionComponentPersistenceRecord> stored =
+                components.listByReservation(scope, reservationId);
+        Map<String, ExecutionComponentRequest> requested = request.components().stream()
+                .collect(Collectors.toMap(ExecutionComponentRequest::idempotencyIdentity,
+                        Function.identity()));
+        boolean equal = request.subject().type().name()
+                        .equals(reservation.get("subject_type", String.class))
+                && request.subject().id().equals(reservation.get("subject_id", UUID.class))
+                && request.actorId().equals(reservation.get("actor_id", String.class))
+                && request.traceId().equals(reservation.get("trace_id", String.class))
+                && stored.size() == requested.size()
+                && stored.stream().allMatch(row -> equalsRequest(row,
+                        requested.get(row.idempotencyIdentity())));
+        if (!equal) {
+            throw conflict("APVERO_EXECUTION_RESERVATION_IDEMPOTENCY_CONFLICT");
+        }
+        return reservationId;
+    }
+
+    private static boolean equalsRequest(
+            ExecutionComponentPersistenceRecord stored, ExecutionComponentRequest requested) {
+        return requested != null
+                && requested.type().name().equals(stored.componentType())
+                && requested.modelRouteId().equals(stored.modelRouteId())
+                && requested.modelRouteReference().equals(stored.modelRouteReference())
+                && requested.estimatedUnits() == stored.estimatedUnits()
+                && requested.estimatedCostMicros() == stored.estimatedCostMicros()
+                && requested.currency().equals(stored.currency());
+    }
+
+    private void evaluateComponentPolicies(
+            WorkspaceScope scope, ExecutionReservationRequest request, OffsetDateTime now) {
+        OffsetDateTime minute = now.withSecond(0).withNano(0);
+        OffsetDateTime month = now.withDayOfMonth(1).toLocalDate()
+                .atStartOfDay().atOffset(ZoneOffset.UTC);
+        UUID applicationId = request.subject().type() == ExecutionSubjectType.APPLICATION_RUN
+                ? request.subject().id() : null;
+        for (BudgetPolicy policy : listBudgets(scope.workspaceId()).stream()
+                .filter(BudgetPolicy::enabled).toList()) {
+            long requestedCost = requestedCost(policy, request, applicationId);
+            if (requestedCost < 0) {
+                continue;
+            }
+            if (policy.requestsPerMinute() != null) {
+                int count = sql.fetchOne("""
+                        insert into rate_limit_counter(policy_id, window_started_at, request_count)
+                        values (?, ?::timestamptz, 1)
+                        on conflict (policy_id, window_started_at)
+                        do update set request_count = rate_limit_counter.request_count + 1
+                        returning request_count
+                        """, policy.id(), minute).get("request_count", Integer.class);
+                if (count > policy.requestsPerMinute()) {
+                    deny(scope, request, "RATE_LIMIT_EXCEEDED");
+                    throw new RateLimitExceededException();
+                }
+            }
+            if (policy.monthlyCostLimitMicros() != null) {
+                long consumed = consumedCost(scope, policy, month);
+                long projected;
+                try {
+                    projected = Math.addExact(consumed, requestedCost);
+                } catch (ArithmeticException exception) {
+                    deny(scope, request, "BUDGET_EXCEEDED");
+                    throw new BudgetExceededException();
+                }
+                if (projected > policy.monthlyCostLimitMicros()) {
+                    deny(scope, request, "BUDGET_EXCEEDED");
+                    throw new BudgetExceededException();
+                }
+            }
+        }
+    }
+
+    private long requestedCost(
+            BudgetPolicy policy, ExecutionReservationRequest request, UUID applicationId) {
+        return switch (policy.scopeType()) {
+            case WORKSPACE -> request.estimatedCostMicros();
+            case APPLICATION -> applicationId != null && applicationId.equals(policy.scopeId())
+                    ? request.estimatedCostMicros() : -1;
+            case MODEL_ROUTE -> {
+                long total = 0;
+                boolean matched = false;
+                try {
+                    for (ExecutionComponentRequest component : request.components()) {
+                        if (component.modelRouteId().equals(policy.scopeId())) {
+                            matched = true;
+                            total = Math.addExact(total, component.estimatedCostMicros());
+                        }
+                    }
+                } catch (ArithmeticException exception) {
+                    throw new IllegalArgumentException(
+                            "APVERO_EXECUTION_COMPONENT_COST_OVERFLOW", exception);
+                }
+                yield matched ? total : -1;
+            }
+        };
+    }
+
+    private long consumedCost(
+            WorkspaceScope scope, BudgetPolicy policy, OffsetDateTime month) {
+        if (policy.scopeType() == BudgetScopeType.MODEL_ROUTE) {
+            Long value = sql.fetchOne("""
+                    select coalesce(sum(cost_micros), 0)
+                    from (
+                        select coalesce(component.actual_cost_micros,
+                            component.estimated_cost_micros) as cost_micros
+                        from execution_reservation_component component
+                        where component.tenant_id = ? and component.workspace_id = ?
+                          and component.model_route_id = ? and component.created_at >= ?::timestamptz
+                        union all
+                        select coalesce(reservation.actual_cost_micros,
+                            reservation.estimated_cost_micros)
+                        from execution_reservation reservation
+                        where reservation.tenant_id = ? and reservation.workspace_id = ?
+                          and reservation.model_route_id = ?
+                          and reservation.created_at >= ?::timestamptz
+                          and not exists (
+                              select 1 from execution_reservation_component component
+                              where component.reservation_id = reservation.id)
+                    ) charged
+                    """, scope.tenantId(), scope.workspaceId(), policy.scopeId(), month,
+                    scope.tenantId(), scope.workspaceId(), policy.scopeId(), month)
+                    .get(0, Long.class);
+            return value == null ? 0 : value;
+        }
+        String applicationClause = policy.scopeType() == BudgetScopeType.APPLICATION
+                ? " and application_id = ?" : "";
+        var bindings = policy.scopeType() == BudgetScopeType.APPLICATION
+                ? new Object[]{scope.tenantId(), scope.workspaceId(), month, policy.scopeId()}
+                : new Object[]{scope.tenantId(), scope.workspaceId(), month};
+        Long value = sql.fetchOne("""
+                select coalesce(sum(coalesce(actual_cost_micros, estimated_cost_micros)), 0)
+                from execution_reservation
+                where tenant_id = ? and workspace_id = ? and created_at >= ?::timestamptz
+                """ + applicationClause, bindings).get(0, Long.class);
+        return value == null ? 0 : value;
+    }
+
+    private void deny(
+            WorkspaceScope scope, ExecutionReservationRequest request, String reasonCode) {
+        policyAudit.denied(scope.tenantId(), scope.workspaceId(), request.subject().id(),
+                request.subject().type().name(), request.actorId(), request.traceId(), reasonCode);
+    }
+
+    private ExecutionAdmission admission(UUID reservationId, UUID workspaceId) {
+        RetentionPolicy retention = get(workspaceId);
+        return new ExecutionAdmission(
+                reservationId, retention.retainPayloads(), retention.maskSensitiveFields());
+    }
+
+    private WorkspaceScope scopeForReservation(UUID reservationId) {
+        UUID workspaceId = sql.fetchOptional("""
+                select workspace_id from execution_reservation where id = ?
+                """, reservationId)
+                .map(record -> record.get("workspace_id", UUID.class))
+                .orElseThrow(() -> conflict("APVERO_EXECUTION_COMPONENT_NOT_FOUND"));
+        WorkspaceScope scope = workspaces.require(workspaceId);
+        Integer count = sql.fetchOne("""
+                select count(*) from execution_reservation
+                where id = ? and tenant_id = ? and workspace_id = ?
+                """, reservationId, scope.tenantId(), scope.workspaceId())
+                .get(0, Integer.class);
+        if (count == null || count != 1) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_NOT_FOUND");
+        }
+        return scope;
+    }
+
+    private void aggregateParent(WorkspaceScope scope, UUID reservationId) {
+        List<ExecutionComponentPersistenceRecord> rows =
+                components.listByReservation(scope, reservationId);
+        if (rows.isEmpty()
+                || rows.stream().anyMatch(row -> !"SUCCEEDED".equals(row.status())
+                        && !"FAILED".equals(row.status()))) {
+            return;
+        }
+        long actualCost = 0;
+        try {
+            for (ExecutionComponentPersistenceRecord row : rows) {
+                actualCost = Math.addExact(actualCost,
+                        Objects.requireNonNull(row.actualCostMicros()));
+            }
+        } catch (ArithmeticException exception) {
+            throw conflict("APVERO_EXECUTION_COMPONENT_COST_OVERFLOW");
+        }
+        boolean succeeded = rows.stream().allMatch(row -> "SUCCEEDED".equals(row.status()));
+        int changed = sql.execute("""
+                update execution_reservation
+                set actual_cost_micros = ?, status = ?, settled_at = ?::timestamptz
+                where tenant_id = ? and workspace_id = ? and id = ? and status = 'RESERVED'
+                """, actualCost, succeeded ? "SUCCEEDED" : "FAILED",
+                OffsetDateTime.now(ZoneOffset.UTC), scope.tenantId(), scope.workspaceId(),
+                reservationId);
+        if (changed != 1) {
+            var current = sql.fetchOne("""
+                    select actual_cost_micros, status from execution_reservation
+                    where tenant_id = ? and workspace_id = ? and id = ?
+                    """, scope.tenantId(), scope.workspaceId(), reservationId);
+            if (current == null
+                    || !Long.valueOf(actualCost).equals(
+                            current.get("actual_cost_micros", Long.class))
+                    || !(succeeded ? "SUCCEEDED" : "FAILED")
+                            .equals(current.get("status", String.class))) {
+                throw conflict("APVERO_EXECUTION_RESERVATION_SETTLEMENT_CONFLICT");
+            }
+        }
+    }
+
+    private static IllegalStateException conflict(String code) {
+        return new IllegalStateException(code);
     }
 
     private boolean matches(BudgetPolicy policy, UUID applicationId, UUID modelRouteId) {

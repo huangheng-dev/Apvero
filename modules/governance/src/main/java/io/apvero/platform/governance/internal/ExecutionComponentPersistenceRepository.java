@@ -12,6 +12,35 @@ interface ExecutionComponentPersistenceRepository {
     Optional<ExecutionComponentPersistenceRecord> find(
             WorkspaceScope scope, UUID componentId);
 
+    Optional<ExecutionComponentPersistenceRecord> findByIdentity(
+            WorkspaceScope scope, UUID reservationId, String idempotencyIdentity);
+
     List<ExecutionComponentPersistenceRecord> listByReservation(
             WorkspaceScope scope, UUID reservationId);
+
+    ExecutionComponentPersistenceRecord markDispatched(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            String providerRequestIdentity,
+            java.time.OffsetDateTime now);
+
+    ExecutionComponentPersistenceRecord settle(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            long actualUnits,
+            long actualCostMicros,
+            String currency,
+            String usageQuality,
+            boolean succeeded,
+            String failureCode,
+            java.time.OffsetDateTime now);
+
+    ExecutionComponentPersistenceRecord requireReconciliation(
+            WorkspaceScope scope,
+            UUID reservationId,
+            String idempotencyIdentity,
+            String failureCode,
+            java.time.OffsetDateTime now);
 }

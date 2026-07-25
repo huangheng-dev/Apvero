@@ -25,5 +25,9 @@ public interface ExecutionGovernance {
         throw new UnsupportedOperationException("APVERO_GOVERNANCE_COMPONENT_SETTLEMENT_DISABLED");
     }
 
+    default void requireReconciliation(ExecutionComponentReconciliation reconciliation) {
+        throw new UnsupportedOperationException("APVERO_GOVERNANCE_COMPONENT_RECONCILIATION_DISABLED");
+    }
+
     void settle(UUID reservationId, long actualCostMicros, boolean succeeded);
 }

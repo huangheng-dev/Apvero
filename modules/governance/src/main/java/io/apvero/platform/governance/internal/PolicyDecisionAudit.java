@@ -21,13 +21,14 @@ class PolicyDecisionAudit {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    void denied(UUID tenantId, UUID workspaceId, UUID applicationId, String actorId, String traceId, String reasonCode) {
+    void denied(UUID tenantId, UUID workspaceId, UUID subjectId, String subjectType,
+            String actorId, String traceId, String reasonCode) {
         sql.insertInto(table("audit_event"))
                 .columns(field("id"), field("tenant_id"), field("workspace_id"), field("occurred_at"),
                         field("actor_id"), field("action"), field("resource_type"), field("resource_id"),
                         field("outcome"), field("trace_id"), field("details"))
                 .values(UUID.randomUUID(), tenantId, workspaceId, OffsetDateTime.now(ZoneOffset.UTC), actorId,
-                        "EXECUTION_ADMISSION", "application", applicationId.toString(), "DENIED", traceId,
+                        "EXECUTION_ADMISSION", subjectType.toLowerCase(), subjectId.toString(), "DENIED", traceId,
                         JSONB.valueOf("{\"reasonCode\":\"" + reasonCode + "\"}"))
                 .execute();
     }
