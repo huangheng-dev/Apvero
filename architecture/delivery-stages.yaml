@@ -114,6 +114,8 @@ stages:
           - docs/zh-CN/p2-2-implementation-plan.md
           - docs/en/p2-2c-embedding-execution-baseline.md
           - docs/zh-CN/p2-2c-embedding-execution-baseline.md
+          - docs/en/p2-2d-durable-build-publication-baseline.md
+          - docs/zh-CN/p2-2d-durable-build-publication-baseline.md
         sliceEvidence:
           - docs/en/p2-2a-verification.md
           - docs/zh-CN/p2-2a-verification.md
