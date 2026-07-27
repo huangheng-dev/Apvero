@@ -3,6 +3,7 @@ package io.apvero.platform.knowledge.internal;
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
@@ -13,6 +14,7 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Ve
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -129,6 +131,14 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public Optional<IndexRow> lockIndex(WorkspaceScope scope, UUID indexId) {
+        return sql.fetchOptional(INDEX_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and id = ? for update",
+                        scope.tenantId(), scope.workspaceId(), indexId)
+                .map(this::mapIndex);
+    }
+
+    @Override
     public BuildRow insertBuild(WorkspaceScope scope, BuildRow row) {
         requireScope(scope, row.tenantId(), row.workspaceId());
         sql.execute("""
@@ -170,11 +180,161 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public Optional<BuildRow> findBuildByIndexAndVersion(
+            WorkspaceScope scope, UUID indexId, String requestedVersion) {
+        return sql.fetchOptional(BUILD_SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ?
+                           and knowledge_index_id = ? and requested_version = ?
+                         """,
+                        scope.tenantId(), scope.workspaceId(), indexId, requestedVersion)
+                .map(this::mapBuild);
+    }
+
+    @Override
+    public List<BuildRow> listBuilds(WorkspaceScope scope, UUID indexId) {
+        return sql.fetch(BUILD_SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ? and knowledge_index_id = ?
+                         order by created_at desc, id desc
+                         """,
+                        scope.tenantId(), scope.workspaceId(), indexId)
+                .map(this::mapBuild);
+    }
+
+    @Override
     public Optional<BuildRow> lockBuild(WorkspaceScope scope, UUID buildId) {
         return sql.fetchOptional(BUILD_SELECT
                         + " where tenant_id = ? and workspace_id = ? and id = ? for update",
                         scope.tenantId(), scope.workspaceId(), buildId)
                 .map(this::mapBuild);
+    }
+
+    @Override
+    public Optional<BuildRow> retryFailedBuild(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            OffsetDateTime retriedAt) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = 'RETRY_WAIT',
+                    attempt_count = 0,
+                    retryable = true,
+                    next_attempt_at = ?,
+                    lease_owner = null,
+                    lease_until = null,
+                    lock_version = lock_version + 1,
+                    cancellation_requested = false,
+                    error_code = null,
+                    error_category = null,
+                    reconciliation_required = false,
+                    failure_metadata = '{}'::jsonb,
+                    completed_at = null,
+                    updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and status = 'FAILED' and retryable = true
+                """, timestamp(retriedAt), timestamp(retriedAt),
+                scope.tenantId(), scope.workspaceId(), buildId, expectedVersion);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> cancelWaitingBuild(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            OffsetDateTime cancelledAt) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = 'CANCELLED',
+                    retryable = false,
+                    next_attempt_at = null,
+                    lock_version = lock_version + 1,
+                    cancellation_requested = true,
+                    error_code = null,
+                    error_category = null,
+                    reconciliation_required = false,
+                    failure_metadata = '{}'::jsonb,
+                    completed_at = ?,
+                    updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and status in ('QUEUED', 'RETRY_WAIT')
+                  and lease_owner is null and lease_until is null
+                """, timestamp(cancelledAt), timestamp(cancelledAt),
+                scope.tenantId(), scope.workspaceId(), buildId, expectedVersion);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public List<BuildSourceCandidateRow> listBuildSourceCandidates(
+            WorkspaceScope scope,
+            UUID knowledgeBaseId,
+            List<UUID> sourceRevisionIds) {
+        if (sourceRevisionIds.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = sourceRevisionIds.stream()
+                .map(ignored -> "?")
+                .collect(Collectors.joining(", "));
+        String statement = """
+                select source.id as source_id,
+                    revision.id as source_revision_id,
+                    revision.content_digest as source_content_digest,
+                    min(document.parser_version) as parser_version,
+                    min(chunk.chunker_version) as chunker_version,
+                    count(distinct document.id) as document_count,
+                    count(chunk.id) as chunk_count
+                from knowledge_source source
+                join knowledge_source_revision revision
+                  on revision.source_id = source.id
+                 and revision.tenant_id = source.tenant_id
+                 and revision.workspace_id = source.workspace_id
+                join knowledge_document document
+                  on document.source_revision_id = revision.id
+                 and document.tenant_id = revision.tenant_id
+                 and document.workspace_id = revision.workspace_id
+                join knowledge_chunk chunk
+                  on chunk.document_id = document.id
+                 and chunk.source_revision_id = revision.id
+                 and chunk.tenant_id = revision.tenant_id
+                 and chunk.workspace_id = revision.workspace_id
+                where source.tenant_id = ?
+                  and source.workspace_id = ?
+                  and source.knowledge_base_id = ?
+                  and source.status = 'ACTIVE'
+                  and revision.snapshot_status = 'SNAPSHOTTED'
+                  and revision.id in (%s)
+                  and exists (
+                      select 1
+                      from knowledge_ingestion_job job
+                      where job.tenant_id = revision.tenant_id
+                        and job.workspace_id = revision.workspace_id
+                        and job.source_id = source.id
+                        and job.source_revision_id = revision.id
+                        and job.status = 'READY'
+                        and job.current_step = 'COMPLETE'
+                  )
+                group by source.id, revision.id, revision.content_digest
+                having count(distinct document.parser_version) = 1
+                   and count(distinct chunk.chunker_version) = 1
+                   and count(distinct document.id) > 0
+                   and count(chunk.id) > 0
+                """.formatted(placeholders);
+        List<Object> arguments = new ArrayList<>(3 + sourceRevisionIds.size());
+        arguments.add(scope.tenantId());
+        arguments.add(scope.workspaceId());
+        arguments.add(knowledgeBaseId);
+        arguments.addAll(sourceRevisionIds);
+        return sql.fetch(statement, arguments.toArray())
+                .map(record -> new BuildSourceCandidateRow(
+                        uuid(record, "source_id"),
+                        uuid(record, "source_revision_id"),
+                        string(record, "source_content_digest"),
+                        string(record, "parser_version"),
+                        string(record, "chunker_version"),
+                        Math.toIntExact(number(record, "document_count").longValue()),
+                        Math.toIntExact(number(record, "chunk_count").longValue())));
     }
 
     @Override
@@ -391,6 +551,10 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
 
     private static Long longValue(Record record, String field) {
         return record.get(field, Long.class);
+    }
+
+    private static Number number(Record record, String field) {
+        return record.get(field, Number.class);
     }
 
     private static OffsetDateTime time(Record record, String field) {

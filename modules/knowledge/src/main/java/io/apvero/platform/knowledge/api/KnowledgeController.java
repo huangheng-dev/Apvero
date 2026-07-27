@@ -226,7 +226,7 @@ final class KnowledgeController {
         return jobs.cancel(workspaceId, jobId, context(httpRequest));
     }
 
-    private static KnowledgeCommandContext context(HttpServletRequest request) {
+    static KnowledgeCommandContext context(HttpServletRequest request) {
         Object actor = request.getAttribute(RequestIdentityAttributes.ACTOR);
         String traceId = request.getHeader("X-Request-Id");
         return new KnowledgeCommandContext(

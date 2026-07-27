@@ -120,6 +120,15 @@ final class KnowledgeIndexPersistenceRecords {
             int sourceSetOrdinal,
             OffsetDateTime createdAt) {}
 
+    record BuildSourceCandidateRow(
+            UUID sourceId,
+            UUID sourceRevisionId,
+            String sourceContentDigest,
+            String parserVersion,
+            String chunkerVersion,
+            int documentCount,
+            int chunkCount) {}
+
     record EntryRow(
             UUID id,
             UUID tenantId,
