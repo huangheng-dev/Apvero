@@ -4,10 +4,13 @@ import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.RetrievalPolicyRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.VersionRow;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +49,57 @@ interface KnowledgeIndexPersistenceRepository {
             UUID buildId,
             long expectedVersion,
             OffsetDateTime cancelledAt);
+
+    List<BuildRow> claimBuilds(
+            WorkspaceScope scope,
+            String leaseOwner,
+            Duration leaseDuration,
+            int limit);
+
+    Optional<BuildRow> renewBuildLease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep,
+            Duration leaseDuration);
+
+    Optional<BuildRow> recordEmbeddingProgressAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            int embeddedEntryCount,
+            int lastDurableChunkOrdinal);
+
+    Optional<BuildRow> advanceBuildToIndexingAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner);
+
+    Optional<BuildRow> advanceBuildToValidatingAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            int validatedEntryCount,
+            String validationDigest);
+
+    Optional<BuildRow> failLeasedBuild(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep,
+            BuildStatus failureStatus,
+            boolean retryable,
+            Duration retryDelay,
+            String errorCode,
+            String errorCategory,
+            boolean reconciliationRequired);
 
     List<BuildSourceCandidateRow> listBuildSourceCandidates(
             WorkspaceScope scope,
