@@ -69,7 +69,7 @@ class P22bScopedImmutablePersistenceIntegrationTest {
     @Test
     void cleanMigrationCreatesOnlyTheSevenApprovedScopedTablesAndProtectionTriggers() {
         assertThat(sql.queryForObject(
-                "select count(*) from flyway_schema_history where version = '10' and success",
+                "select count(*) from flyway_schema_history where version = '11' and success",
                 Integer.class)).isEqualTo(1);
 
         assertThat(sql.queryForObject("""
@@ -106,8 +106,9 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                     'knowledge_index_build_preserves_durable_state',
                     'knowledge_index_build_validates_route_profile',
                     'knowledge_index_build_revision_validates_snapshot',
+                    'knowledge_index_version_validates_publication',
                     'execution_reservation_component_transition_guard')
-                """, Integer.class)).isEqualTo(9);
+                """, Integer.class)).isEqualTo(10);
 
         assertThat(sql.queryForObject("""
                 select count(*)
@@ -177,6 +178,65 @@ class P22bScopedImmutablePersistenceIntegrationTest {
     }
 
     @Test
+    void upgradesARealV10SchemaToV11WithoutAddingStatefulTables() {
+        String schema = "upgrade_v11_" + UUID.randomUUID().toString().replace("-", "");
+        try {
+            Flyway toV10 = flyway(schema, "10");
+            assertThat(toV10.migrate().migrationsExecuted).isEqualTo(10);
+            int tableCountAtV10 = countTables(schema);
+
+            Flyway toV11 = flyway(schema, "11");
+            assertThat(toV11.migrate().migrationsExecuted).isEqualTo(1);
+            assertThat(countTables(schema)).isEqualTo(tableCountAtV10);
+            assertThat(queryInSchema(schema, """
+                    select count(*)
+                    from information_schema.triggers
+                    where trigger_schema = ?
+                      and trigger_name = 'knowledge_index_version_validates_publication'
+                    """)).isEqualTo(1);
+        } finally {
+            sql.execute("drop schema if exists " + schema + " cascade");
+        }
+    }
+
+    @Test
+    void databaseRejectsSkippedBuildTransitionsAndPartialPublication() {
+        Fixture fixture = createFixture("v11-guards");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        IndexRow index = repository.insertIndex(fixture.scope(), new IndexRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                fixture.baseId(), "guard-index", "Guard Index", IndexStatus.ACTIVE,
+                1, 0, null, now, now));
+        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+                fixture, index.id(), "1.0.0", digest('1'), digest('2'), now));
+        repository.insertBuildRevision(
+                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+
+        assertThatThrownBy(() -> sql.update("""
+                update knowledge_index_build
+                set status = 'VALIDATING', current_step = 'VALIDATING',
+                    lock_version = lock_version + 1, updated_at = now()
+                where id = ?
+                """, build.id()))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("illegal knowledge_index_build state transition");
+        assertThatThrownBy(() -> sql.update("""
+                update knowledge_index_build
+                set lock_version = lock_version + 2, updated_at = now()
+                where id = ?
+                """, build.id()))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("lock_version must increase exactly once");
+        assertThatThrownBy(() -> repository.insertVersion(fixture.scope(), new VersionRow(
+                UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
+                index.id(), build.id(), "1.0.0", "guard-index@1.0.0",
+                fixture.routeId(), fixture.routeReference(), 3, 1, 1,
+                digest('3'), "READY", now)))
+                .isInstanceOf(org.jooq.exception.DataAccessException.class)
+                .hasMessageContaining("complete VALIDATING build");
+    }
+
+    @Test
     void embeddingEntryBatchRollsBackCompletelyWhenOneEntryViolatesPersistenceConstraints() {
         Fixture fixture = createFixture("atomic-batch");
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -184,10 +244,11 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 fixture.baseId(), "atomic-index", "Atomic Index", IndexStatus.ACTIVE,
                 1, 0, null, now, now));
-        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+        BuildRow queued = repository.insertBuild(fixture.scope(), queuedBuild(
                 fixture, index.id(), "1.0.0", digest('1'), digest('2'), now));
         repository.insertBuildRevision(
-                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+                fixture.scope(), buildRevision(fixture, index.id(), queued.id(), now));
+        BuildRow build = activateEmbedding(fixture.scope(), queued.id(), now);
         UUID secondChunkId = UUID.randomUUID();
         sql.update("""
                 insert into knowledge_chunk(
@@ -225,10 +286,11 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 fixture.baseId(), "concurrent-index", "Concurrent Index", IndexStatus.ACTIVE,
                 1, 0, null, now, now));
-        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+        BuildRow queued = repository.insertBuild(fixture.scope(), queuedBuild(
                 fixture, index.id(), "1.0.0", digest('7'), digest('8'), now));
         repository.insertBuildRevision(
-                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+                fixture.scope(), buildRevision(fixture, index.id(), queued.id(), now));
+        BuildRow build = activateEmbedding(fixture.scope(), queued.id(), now);
         EntryRow entry = new EntryRow(
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
@@ -275,10 +337,11 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 fixture.baseId(), "policy-index", "Policy Index", IndexStatus.ACTIVE,
                 1, 0, null, now, now));
-        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+        BuildRow queued = repository.insertBuild(fixture.scope(), queuedBuild(
                 fixture, index.id(), "1.0.0", digest('2'), digest('3'), now));
         BuildRevisionRow revision = repository.insertBuildRevision(
-                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+                fixture.scope(), buildRevision(fixture, index.id(), queued.id(), now));
+        BuildRow build = activateEmbedding(fixture.scope(), queued.id(), now);
         EntryRow entry = repository.insertEntry(fixture.scope(), new EntryRow(
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
@@ -328,10 +391,11 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 fixture.baseId(), "immutable-index", "Immutable Index", IndexStatus.ACTIVE,
                 1, 0, null, now, now));
-        BuildRow build = repository.insertBuild(fixture.scope(), queuedBuild(
+        BuildRow queued = repository.insertBuild(fixture.scope(), queuedBuild(
                 fixture, index.id(), "1.0.0", digest('8'), digest('9'), now));
         BuildRevisionRow revision = repository.insertBuildRevision(
-                fixture.scope(), buildRevision(fixture, index.id(), build.id(), now));
+                fixture.scope(), buildRevision(fixture, index.id(), queued.id(), now));
+        BuildRow build = activateEmbedding(fixture.scope(), queued.id(), now);
         EntryRow entry = repository.insertEntry(fixture.scope(), new EntryRow(
                 UUID.randomUUID(), fixture.scope().tenantId(), fixture.scope().workspaceId(),
                 build.id(), index.id(), fixture.baseId(), fixture.sourceId(),
@@ -342,11 +406,18 @@ class P22bScopedImmutablePersistenceIntegrationTest {
         transactions.executeWithoutResult(ignored -> {
             sql.update("""
                     update knowledge_index_build
+                    set status = 'INDEXING', current_step = 'INDEXING',
+                        lock_version = lock_version + 1, updated_at = ?
+                    where id = ?
+                    """, now, build.id());
+            sql.update("""
+                    update knowledge_index_build
                     set status = 'VALIDATING', current_step = 'VALIDATING',
                         embedded_entry_count = 1, validated_entry_count = 1,
-                        validation_digest = ?, started_at = ?, updated_at = ?
+                        validation_digest = ?, artifact_digest = ?,
+                        lock_version = lock_version + 1, updated_at = ?
                     where id = ?
-                    """, digest('c'), now, now, build.id());
+                    """, digest('c'), digest('d'), now, build.id());
             repository.insertVersion(fixture.scope(), new VersionRow(
                     versionId, fixture.scope().tenantId(), fixture.scope().workspaceId(),
                     index.id(), build.id(), "1.0.0", "immutable-index@1.0.0",
@@ -355,10 +426,10 @@ class P22bScopedImmutablePersistenceIntegrationTest {
             sql.update("""
                     update knowledge_index_build
                     set status = 'READY', current_step = 'COMPLETE',
-                        artifact_digest = ?, published_version_id = ?,
-                        completed_at = ?, updated_at = ?
+                        published_version_id = ?, completed_at = ?,
+                        lock_version = lock_version + 1, updated_at = ?
                     where id = ?
-                    """, digest('d'), versionId, now, now, build.id());
+                    """, versionId, now, now, build.id());
             sql.update("""
                     update knowledge_index
                     set latest_ready_version_id = ?, version_count = 1,
@@ -379,7 +450,7 @@ class P22bScopedImmutablePersistenceIntegrationTest {
         assertThatThrownBy(() -> sql.update(
                 "update knowledge_index_build set error_code = 'changed' where id = ?", build.id()))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("published knowledge_index_build is immutable");
+                .hasMessageContaining("terminal knowledge_index_build is immutable");
         assertThatThrownBy(() -> sql.update(
                 "delete from knowledge_index_build_revision where id = ?", revision.id()))
                 .isInstanceOf(DataAccessException.class)
@@ -395,7 +466,7 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 List.of(1.0F, 1.0F, 1.0F), 3, digest('e'), digest('f'), 1,
                 fixture.routeId(), fixture.routeReference(), now)))
                 .isInstanceOf(org.jooq.exception.DataAccessException.class)
-                .hasMessageContaining("published knowledge index build cannot accept new entries");
+                .hasMessageContaining("knowledge index entries require an unpublished EMBEDDING build");
 
         BuildRow failed = repository.insertBuild(fixture.scope(), failedBuild(
                 fixture, index.id(), "2.0.0", digest('f'), digest('0'), now.plusSeconds(1)));
@@ -569,6 +640,16 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 digest('1'), "apvero-text@1.0.0", "apvero-boundary@1.0.0", 0, now);
     }
 
+    private BuildRow activateEmbedding(WorkspaceScope scope, UUID buildId, OffsetDateTime now) {
+        assertThat(sql.update("""
+                update knowledge_index_build
+                set status = 'EMBEDDING', started_at = ?,
+                    lock_version = lock_version + 1, updated_at = ?
+                where tenant_id = ? and workspace_id = ? and id = ?
+                """, now, now, scope.tenantId(), scope.workspaceId(), buildId)).isEqualTo(1);
+        return repository.findBuild(scope, buildId).orElseThrow();
+    }
+
     private Flyway flyway(String schema, String target) {
         return Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
@@ -577,6 +658,18 @@ class P22bScopedImmutablePersistenceIntegrationTest {
                 .locations("classpath:db/migration")
                 .target(MigrationVersion.fromVersion(target))
                 .load();
+    }
+
+    private int countTables(String schema) {
+        return sql.queryForObject("""
+                select count(*)
+                from information_schema.tables
+                where table_schema = ?
+                """, Integer.class, schema);
+    }
+
+    private int queryInSchema(String schema, String statement) {
+        return sql.queryForObject(statement, Integer.class, schema);
     }
 
     private static String digest(char value) {

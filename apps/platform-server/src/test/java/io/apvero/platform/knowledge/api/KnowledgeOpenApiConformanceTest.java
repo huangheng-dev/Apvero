@@ -22,19 +22,27 @@ class KnowledgeOpenApiConformanceTest {
             "/api/v1/knowledge-sources",
             "/api/v1/knowledge-source-revisions",
             "/api/v1/knowledge-ingestion-jobs");
+    private static final Set<Operation> P22D1_OPERATIONS = Set.of(
+            new Operation("get", "/api/v1/knowledge-indexes/{indexId}/builds"),
+            new Operation("post", "/api/v1/knowledge-indexes/{indexId}/builds"),
+            new Operation("get", "/api/v1/knowledge-index-builds/{buildId}"),
+            new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/retry"),
+            new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/cancel"));
 
     @Test
-    void everyP21ControllerOperationMatchesTheCommittedOpenApiMethodAndPath() throws Exception {
+    void everyImplementedKnowledgeOperationMatchesTheCommittedOpenApiMethodAndPath() throws Exception {
         assertThat(controllerOperations()).isEqualTo(contractOperations());
     }
 
     private static Set<Operation> controllerOperations() {
-        String basePath = KnowledgeController.class.getAnnotation(RequestMapping.class).value()[0];
         Set<Operation> operations = new LinkedHashSet<>();
-        for (Method method : KnowledgeController.class.getDeclaredMethods()) {
-            add(operations, basePath, method, GetMapping.class, "get");
-            add(operations, basePath, method, PostMapping.class, "post");
-            add(operations, basePath, method, DeleteMapping.class, "delete");
+        for (Class<?> controller : Set.of(KnowledgeController.class, KnowledgeIndexBuildController.class)) {
+            String basePath = controller.getAnnotation(RequestMapping.class).value()[0];
+            for (Method method : controller.getDeclaredMethods()) {
+                add(operations, basePath, method, GetMapping.class, "get");
+                add(operations, basePath, method, PostMapping.class, "post");
+                add(operations, basePath, method, DeleteMapping.class, "delete");
+            }
         }
         return operations;
     }
@@ -71,17 +79,23 @@ class KnowledgeOpenApiConformanceTest {
         Map<String, Object> paths = (Map<String, Object>) document.get("paths");
         Set<Operation> operations = new LinkedHashSet<>();
         paths.forEach((path, value) -> {
-            if (P21_PATH_PREFIXES.stream().noneMatch(path::startsWith)) {
-                return;
-            }
             Map<String, Object> pathItem = (Map<String, Object>) value;
             for (String method : Set.of("get", "post", "delete")) {
-                if (pathItem.containsKey(method)) {
-                    Map<String, Object> operation = (Map<String, Object>) pathItem.get(method);
+                if (!pathItem.containsKey(method)) {
+                    continue;
+                }
+                Operation candidate = new Operation(method, path);
+                Map<String, Object> operation = (Map<String, Object>) pathItem.get(method);
+                if (P21_PATH_PREFIXES.stream().anyMatch(path::startsWith)) {
                     assertThat(operation.get("x-apvero-implementation-status"))
                             .as("%s %s remains contract-only until P2 acceptance", method, path)
                             .isEqualTo("contract-only");
-                    operations.add(new Operation(method, path));
+                    operations.add(candidate);
+                } else if (P22D1_OPERATIONS.contains(candidate)) {
+                    assertThat(operation)
+                            .as("%s %s is implemented by P2.2d-1", method, path)
+                            .doesNotContainKey("x-apvero-implementation-status");
+                    operations.add(candidate);
                 }
             }
         });

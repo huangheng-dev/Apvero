@@ -911,7 +911,6 @@ paths:
       tags: [Knowledge]
       summary: List persisted builds for one index
       operationId: listKnowledgeIndexBuilds
-      x-apvero-implementation-status: contract-only
       responses:
         "200":
           description: Newest builds first.
@@ -923,7 +922,6 @@ paths:
       tags: [Knowledge]
       summary: Build and validate a candidate immutable index version
       operationId: createKnowledgeIndexBuild
-      x-apvero-implementation-status: contract-only
       requestBody:
         required: true
         content:
@@ -943,7 +941,6 @@ paths:
       tags: [Knowledge]
       summary: Get index build state and validation evidence
       operationId: getKnowledgeIndexBuild
-      x-apvero-implementation-status: contract-only
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/KnowledgeIndexBuildId"
@@ -959,7 +956,6 @@ paths:
       tags: [Knowledge]
       summary: Retry a retryable failed index build
       operationId: retryKnowledgeIndexBuild
-      x-apvero-implementation-status: contract-only
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/KnowledgeIndexBuildId"
@@ -976,7 +972,6 @@ paths:
       tags: [Knowledge]
       summary: Cancel a queued or retry-wait index build
       operationId: cancelKnowledgeIndexBuild
-      x-apvero-implementation-status: contract-only
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/KnowledgeIndexBuildId"
