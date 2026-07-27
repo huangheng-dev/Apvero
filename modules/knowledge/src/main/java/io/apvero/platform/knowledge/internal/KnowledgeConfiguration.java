@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties({
         KnowledgeProperties.class,
         KnowledgeRunnerProperties.class,
+        KnowledgeIndexBuildRunnerProperties.class,
         WebCaptureProperties.class
 })
 class KnowledgeConfiguration {

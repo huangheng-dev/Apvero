@@ -13,6 +13,7 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Re
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.VersionRow;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -263,6 +264,295 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                   and lease_owner is null and lease_until is null
                 """, timestamp(cancelledAt), timestamp(cancelledAt),
                 scope.tenantId(), scope.workspaceId(), buildId, expectedVersion);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public List<BuildRow> claimBuilds(
+            WorkspaceScope scope,
+            String leaseOwner,
+            Duration leaseDuration,
+            int limit) {
+        List<UUID> claimedIds = sql.fetch("""
+                        with lease_clock as (
+                            select transaction_timestamp() as claimed_at
+                        ),
+                        candidates as (
+                            select build.id
+                            from knowledge_index_build build
+                            cross join lease_clock
+                            where build.tenant_id = ?
+                              and build.workspace_id = ?
+                              and (
+                                  (build.status in ('QUEUED', 'RETRY_WAIT')
+                                      and build.attempt_count < build.maximum_attempts
+                                      and build.lease_owner is null
+                                      and build.lease_until is null
+                                      and (build.status = 'QUEUED'
+                                          or build.next_attempt_at <= lease_clock.claimed_at))
+                                  or
+                                  (build.status in ('EMBEDDING', 'INDEXING', 'VALIDATING')
+                                      and (
+                                          (build.lease_owner is null and build.lease_until is null)
+                                          or build.lease_until <= lease_clock.claimed_at
+                                      ))
+                              )
+                            order by build.next_attempt_at nulls first, build.created_at, build.id
+                            for update of build skip locked
+                            limit ?
+                        )
+                        update knowledge_index_build build
+                        set status = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then build.current_step
+                                else build.status
+                            end,
+                            attempt_count = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT')
+                                    then build.attempt_count + 1
+                                else build.attempt_count
+                            end,
+                            retryable = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then false
+                                else build.retryable
+                            end,
+                            next_attempt_at = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then null
+                                else build.next_attempt_at
+                            end,
+                            lease_owner = ?,
+                            lease_until = transaction_timestamp()
+                                + (?::bigint * interval '1 millisecond'),
+                            error_code = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then null
+                                else build.error_code
+                            end,
+                            error_category = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then null
+                                else build.error_category
+                            end,
+                            reconciliation_required = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then false
+                                else build.reconciliation_required
+                            end,
+                            failure_metadata = case
+                                when build.status in ('QUEUED', 'RETRY_WAIT') then '{}'::jsonb
+                                else build.failure_metadata
+                            end,
+                            started_at = coalesce(build.started_at, transaction_timestamp()),
+                            lock_version = build.lock_version + 1,
+                            updated_at = transaction_timestamp()
+                        from candidates
+                        where build.id = candidates.id
+                        returning build.id
+                        """,
+                        scope.tenantId(),
+                        scope.workspaceId(),
+                        limit,
+                        leaseOwner,
+                        leaseDuration.toMillis())
+                .getValues("id", UUID.class);
+        return claimedIds.stream()
+                .map(id -> findBuild(scope, id).orElseThrow())
+                .sorted(java.util.Comparator.comparing(BuildRow::createdAt).thenComparing(BuildRow::id))
+                .toList();
+    }
+
+    @Override
+    public Optional<BuildRow> renewBuildLease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep,
+            Duration leaseDuration) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set lease_until = transaction_timestamp()
+                        + (?::bigint * interval '1 millisecond'),
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = ? and current_step = ?
+                  and lease_until > transaction_timestamp()
+                """,
+                leaseDuration.toMillis(),
+                scope.tenantId(),
+                scope.workspaceId(),
+                buildId,
+                expectedVersion,
+                expectedLeaseOwner,
+                expectedStatus.name(),
+                expectedStep.name());
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> recordEmbeddingProgressAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            int embeddedEntryCount,
+            int lastDurableChunkOrdinal) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set embedded_entry_count = ?,
+                    last_durable_chunk_ordinal = ?,
+                    lease_owner = null,
+                    lease_until = null,
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = 'EMBEDDING' and current_step = 'EMBEDDING'
+                  and lease_until > transaction_timestamp()
+                  and embedded_entry_count <= ?
+                  and requested_chunk_count >= ?
+                  and ? = ? - 1
+                  and (last_durable_chunk_ordinal is null
+                      or last_durable_chunk_ordinal <= ?)
+                """,
+                embeddedEntryCount,
+                lastDurableChunkOrdinal,
+                scope.tenantId(),
+                scope.workspaceId(),
+                buildId,
+                expectedVersion,
+                expectedLeaseOwner,
+                embeddedEntryCount,
+                embeddedEntryCount,
+                lastDurableChunkOrdinal,
+                embeddedEntryCount,
+                lastDurableChunkOrdinal);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> advanceBuildToIndexingAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = 'INDEXING',
+                    current_step = 'INDEXING',
+                    lease_owner = null,
+                    lease_until = null,
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = 'EMBEDDING' and current_step = 'EMBEDDING'
+                  and lease_until > transaction_timestamp()
+                  and embedded_entry_count = requested_chunk_count
+                """,
+                scope.tenantId(),
+                scope.workspaceId(),
+                buildId,
+                expectedVersion,
+                expectedLeaseOwner);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> advanceBuildToValidatingAndRelease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            int validatedEntryCount,
+            String validationDigest) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = 'VALIDATING',
+                    current_step = 'VALIDATING',
+                    validated_entry_count = ?,
+                    validation_digest = ?,
+                    lease_owner = null,
+                    lease_until = null,
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = 'INDEXING' and current_step = 'INDEXING'
+                  and lease_until > transaction_timestamp()
+                  and embedded_entry_count = requested_chunk_count
+                  and ? = requested_chunk_count
+                """,
+                validatedEntryCount,
+                validationDigest,
+                scope.tenantId(),
+                scope.workspaceId(),
+                buildId,
+                expectedVersion,
+                expectedLeaseOwner,
+                validatedEntryCount);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> failLeasedBuild(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep,
+            BuildStatus failureStatus,
+            boolean retryable,
+            Duration retryDelay,
+            String errorCode,
+            String errorCategory,
+            boolean reconciliationRequired) {
+        if (failureStatus != BuildStatus.RETRY_WAIT && failureStatus != BuildStatus.FAILED) {
+            throw new IllegalArgumentException("APVERO_KNOWLEDGE_INDEX_BUILD_FAILURE_STATUS_INVALID");
+        }
+        Long retryDelayMillis = retryDelay == null ? null : retryDelay.toMillis();
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = ?,
+                    retryable = ?,
+                    next_attempt_at = case
+                        when ? = 'RETRY_WAIT' then transaction_timestamp()
+                            + (?::bigint * interval '1 millisecond')
+                        else null
+                    end,
+                    lease_owner = null,
+                    lease_until = null,
+                    error_code = ?,
+                    error_category = ?,
+                    reconciliation_required = ?,
+                    failure_metadata = '{}'::jsonb,
+                    completed_at = case
+                        when ? = 'FAILED' then transaction_timestamp()
+                        else null
+                    end,
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = ? and current_step = ?
+                  and status in ('EMBEDDING', 'INDEXING', 'VALIDATING')
+                  and lease_until > transaction_timestamp()
+                """,
+                failureStatus.name(),
+                retryable,
+                failureStatus.name(),
+                retryDelayMillis,
+                errorCode,
+                errorCategory,
+                reconciliationRequired,
+                failureStatus.name(),
+                scope.tenantId(),
+                scope.workspaceId(),
+                buildId,
+                expectedVersion,
+                expectedLeaseOwner,
+                expectedStatus.name(),
+                expectedStep.name());
         return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
     }
 
