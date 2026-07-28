@@ -15,10 +15,13 @@ import io.apvero.platform.governance.ExecutionComponentDispatch;
 import io.apvero.platform.governance.ExecutionComponentReconciliation;
 import io.apvero.platform.governance.ExecutionComponentRequest;
 import io.apvero.platform.governance.ExecutionComponentSettlement;
+import io.apvero.platform.governance.ExecutionComponentSnapshot;
+import io.apvero.platform.governance.ExecutionComponentState;
 import io.apvero.platform.governance.ExecutionComponentType;
 import io.apvero.platform.governance.ExecutionGovernance;
 import io.apvero.platform.governance.ExecutionReservationRequest;
 import io.apvero.platform.governance.ExecutionSubjectType;
+import io.apvero.platform.governance.ExecutionUsageQuality;
 import io.apvero.platform.governance.RateLimitExceededException;
 import io.apvero.platform.governance.RetentionPolicy;
 import io.apvero.platform.governance.RetentionPolicyCatalog;
@@ -32,6 +35,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -249,7 +253,7 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public ExecutionAdmission admit(ExecutionReservationRequest request) {
         WorkspaceScope scope = workspaces.require(request.workspaceId());
         sql.fetch("select pg_advisory_xact_lock(hashtextextended(?, 0))",
@@ -294,7 +298,7 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void markDispatched(ExecutionComponentDispatch dispatch) {
         WorkspaceScope scope = scopeForReservation(dispatch.reservationId());
         components.markDispatched(scope, dispatch.reservationId(),
@@ -303,7 +307,7 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void settle(ExecutionComponentSettlement settlement) {
         WorkspaceScope scope = scopeForReservation(settlement.reservationId());
         components.settle(scope, settlement.reservationId(), settlement.idempotencyIdentity(),
@@ -314,12 +318,27 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void requireReconciliation(ExecutionComponentReconciliation reconciliation) {
         WorkspaceScope scope = scopeForReservation(reconciliation.reservationId());
         components.requireReconciliation(scope, reconciliation.reservationId(),
                 reconciliation.idempotencyIdentity(), reconciliation.failureCode(),
                 OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    @Override
+    public Optional<ExecutionComponentSnapshot> findComponent(
+            UUID workspaceId,
+            UUID reservationId,
+            String idempotencyIdentity) {
+        Objects.requireNonNull(workspaceId, "APVERO_WORKSPACE_ID_REQUIRED");
+        Objects.requireNonNull(reservationId, "APVERO_EXECUTION_RESERVATION_ID_REQUIRED");
+        if (idempotencyIdentity == null || idempotencyIdentity.isBlank()) {
+            throw new IllegalArgumentException("APVERO_EXECUTION_COMPONENT_IDEMPOTENCY_INVALID");
+        }
+        WorkspaceScope scope = workspaces.require(workspaceId);
+        return components.findByIdentity(scope, reservationId, idempotencyIdentity.trim())
+                .map(DefaultGovernanceCatalog::snapshot);
     }
 
     @Override
@@ -603,6 +622,27 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
             throw conflict("APVERO_EXECUTION_COMPONENT_NOT_FOUND");
         }
         return scope;
+    }
+
+    private static ExecutionComponentSnapshot snapshot(
+            ExecutionComponentPersistenceRecord row) {
+        return new ExecutionComponentSnapshot(
+                row.reservationId(),
+                ExecutionComponentType.valueOf(row.componentType()),
+                row.modelRouteId(),
+                row.modelRouteReference(),
+                row.idempotencyIdentity(),
+                row.estimatedUnits(),
+                row.actualUnits(),
+                row.estimatedCostMicros(),
+                row.actualCostMicros(),
+                row.currency(),
+                row.usageQuality() == null
+                        ? null
+                        : ExecutionUsageQuality.valueOf(row.usageQuality()),
+                ExecutionComponentState.valueOf(row.status()),
+                row.providerRequestIdentity(),
+                row.failureCode());
     }
 
     private void aggregateParent(WorkspaceScope scope, UUID reservationId) {

@@ -24,6 +24,11 @@ final class KnowledgeEmbeddingRecoveryDecider {
         if (component == ComponentState.SUCCEEDED) {
             return RecoveryAction.COMPLETE;
         }
+        if ((component == ComponentState.FAILED
+                || component == ComponentState.RECONCILIATION_REQUIRED)
+                && entries == EntryState.COMPLETE_EQUAL) {
+            return RecoveryAction.LEDGER_ARTIFACT_INCONSISTENCY;
+        }
         if (entries == EntryState.COMPLETE_EQUAL) {
             return RecoveryAction.SETTLE_ONLY;
         }

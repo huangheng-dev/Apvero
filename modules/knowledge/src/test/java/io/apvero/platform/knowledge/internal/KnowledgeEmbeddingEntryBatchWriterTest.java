@@ -9,6 +9,9 @@ import static org.mockito.Mockito.when;
 
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -86,6 +89,27 @@ class KnowledgeEmbeddingEntryBatchWriterTest {
         assertThatThrownBy(() -> writer.persist(scope, buildId, List.of(first)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("APVERO_KNOWLEDGE_ENTRY_BATCH_CONFLICT");
+    }
+
+    @Test
+    void rejectsEntryPersistenceWhenTheDatabaseLeaseFenceDoesNotMatch() {
+        EntryRow expected = row(UUID.randomUUID(), 0, 0, List.of(1f, 0f));
+        BuildRow claim = mock(BuildRow.class);
+        when(claim.id()).thenReturn(buildId);
+        when(claim.lockVersion()).thenReturn(7L);
+        when(repository.lockActiveBuildLease(
+                scope,
+                buildId,
+                7L,
+                "stale-worker",
+                BuildStatus.EMBEDDING,
+                BuildStep.EMBEDDING)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> writer.persistUnderLease(
+                        scope, claim, "stale-worker", List.of(expected)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
+        verify(repository, never()).insertEntry(scope, expected);
     }
 
     private EntryRow row(UUID chunkId, int entryOrdinal, int batchOrdinal, List<Float> vector) {

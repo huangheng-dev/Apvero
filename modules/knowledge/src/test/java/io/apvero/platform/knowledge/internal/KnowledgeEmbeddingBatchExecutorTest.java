@@ -113,6 +113,61 @@ class KnowledgeEmbeddingBatchExecutorTest {
     }
 
     @Test
+    void reconstructsTheNextBatchFromTheDurableCursor() {
+        KnowledgeEmbeddingBatchPlan plan =
+                executor.prepareNext(scope, build, "lease").orElseThrow();
+
+        assertThat(plan.batchOrdinal()).isZero();
+        assertThat(plan.state()).isEqualTo(KnowledgeEmbeddingBatchState.MISSING);
+        assertThat(plan.orderedChunks())
+                .extracting(KnowledgeEmbeddingBatchPlan.PlannedChunk::chunkId)
+                .containsExactly(firstChunkId, secondChunkId);
+    }
+
+    @Test
+    void reconstructsAnEqualWrittenBatchInsteadOfSkippingIt() {
+        KnowledgeEmbeddingBatchPlan initial =
+                executor.prepareNext(scope, build, "lease").orElseThrow();
+        EmbeddingExecutionResult result = new EmbeddingExecutionResult(
+                routeId,
+                "embedding-route@1",
+                modelId,
+                "embedding-model",
+                3,
+                initial.idempotencyIdentity(),
+                List.of(
+                        new EmbeddingVectorOutput(
+                                firstChunkId, rawDigest("first"), List.of(1f, 0f, 0f)),
+                        new EmbeddingVectorOutput(
+                                secondChunkId, rawDigest("second"), List.of(0f, 1f, 0f))),
+                11L,
+                EmbeddingUsageQuality.ACTUAL,
+                3,
+                "USD",
+                "provider-request",
+                4);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<EntryRow>> captured = ArgumentCaptor.forClass(List.class);
+        when(writer.persist(
+                        org.mockito.ArgumentMatchers.eq(scope),
+                        org.mockito.ArgumentMatchers.eq(buildId),
+                        org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(BatchWriteOutcome.INSERTED);
+        executor.persist(initial, result);
+        verify(writer).persist(
+                org.mockito.ArgumentMatchers.eq(scope),
+                org.mockito.ArgumentMatchers.eq(buildId),
+                captured.capture());
+        when(indexes.listEntries(scope, buildId)).thenReturn(captured.getValue());
+
+        KnowledgeEmbeddingBatchPlan recovered =
+                executor.prepareNext(scope, build, "lease").orElseThrow();
+
+        assertThat(recovered.idempotencyIdentity()).isEqualTo(initial.idempotencyIdentity());
+        assertThat(recovered.state()).isEqualTo(KnowledgeEmbeddingBatchState.COMPLETE_EQUAL);
+    }
+
+    @Test
     void rejectsNonCanonicalOrderBeforeQuoteOrDispatch() {
         KnowledgeEmbeddingBatchRequest request = new KnowledgeEmbeddingBatchRequest(
                 scope, buildId, 0, List.of(secondChunkId, firstChunkId));

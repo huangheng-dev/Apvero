@@ -1,6 +1,8 @@
 package io.apvero.platform.knowledge.internal;
 
 import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.ComponentState.DISPATCHED;
+import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.ComponentState.FAILED;
+import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.ComponentState.RECONCILIATION_REQUIRED;
 import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.ComponentState.RESERVED;
 import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.ComponentState.SUCCEEDED;
 import static io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.EntryState.COMPLETE_DIFFERENT;
@@ -42,6 +44,56 @@ class KnowledgeEmbeddingRecoveryDeciderTest {
                 .isEqualTo(COMPLETE);
         assertThat(decide(SUCCEEDED, COMPLETE_DIFFERENT, EmbeddingReplayPolicy.RECONCILIATION_REQUIRED))
                 .isEqualTo(LEDGER_ARTIFACT_INCONSISTENCY);
+        assertThat(decide(FAILED, COMPLETE_EQUAL, EmbeddingReplayPolicy.SAFE_REPLAY))
+                .isEqualTo(LEDGER_ARTIFACT_INCONSISTENCY);
+        assertThat(decide(RECONCILIATION_REQUIRED, COMPLETE_EQUAL, EmbeddingReplayPolicy.SAFE_REPLAY))
+                .isEqualTo(LEDGER_ARTIFACT_INCONSISTENCY);
+    }
+
+    @Test
+    void exhaustsEveryComponentEntryAndReplayPolicyCombination() {
+        for (KnowledgeEmbeddingRecoveryDecider.ComponentState component
+                : KnowledgeEmbeddingRecoveryDecider.ComponentState.values()) {
+            for (KnowledgeEmbeddingRecoveryDecider.EntryState entries
+                    : KnowledgeEmbeddingRecoveryDecider.EntryState.values()) {
+                for (EmbeddingReplayPolicy replayPolicy : EmbeddingReplayPolicy.values()) {
+                    assertThat(decide(component, entries, replayPolicy))
+                            .as("%s / %s / %s", component, entries, replayPolicy)
+                            .isEqualTo(expected(component, entries, replayPolicy));
+                }
+            }
+        }
+    }
+
+    private static KnowledgeEmbeddingRecoveryDecider.RecoveryAction expected(
+            KnowledgeEmbeddingRecoveryDecider.ComponentState component,
+            KnowledgeEmbeddingRecoveryDecider.EntryState entries,
+            EmbeddingReplayPolicy replayPolicy) {
+        if (entries == PARTIAL
+                || (entries == COMPLETE_DIFFERENT && !component.terminal())) {
+            return INTEGRITY_FAILURE;
+        }
+        if (component.terminal() && entries != COMPLETE_EQUAL) {
+            return LEDGER_ARTIFACT_INCONSISTENCY;
+        }
+        if (component == SUCCEEDED) {
+            return COMPLETE;
+        }
+        if (component == FAILED || component == RECONCILIATION_REQUIRED) {
+            return LEDGER_ARTIFACT_INCONSISTENCY;
+        }
+        if (entries == COMPLETE_EQUAL) {
+            return SETTLE_ONLY;
+        }
+        return switch (component) {
+            case NONE -> ADMIT;
+            case RESERVED -> DISPATCH;
+            case DISPATCHED -> replayPolicy == EmbeddingReplayPolicy.SAFE_REPLAY
+                    ? REPLAY
+                    : RECONCILE;
+            case SUCCEEDED, FAILED, RECONCILIATION_REQUIRED ->
+                    LEDGER_ARTIFACT_INCONSISTENCY;
+        };
     }
 
     private static KnowledgeEmbeddingRecoveryDecider.RecoveryAction decide(

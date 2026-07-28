@@ -2,6 +2,9 @@ package io.apvero.platform.knowledge.internal;
 
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -70,6 +73,28 @@ class KnowledgeEmbeddingEntryBatchWriter {
             throw new IllegalStateException("APVERO_KNOWLEDGE_ENTRY_BATCH_CONFLICT");
         }
         return BatchWriteOutcome.INSERTED;
+    }
+
+    @Transactional
+    BatchWriteOutcome persistUnderLease(
+            WorkspaceScope scope,
+            BuildRow claim,
+            String leaseOwner,
+            List<EntryRow> expectedRows) {
+        Objects.requireNonNull(claim, "APVERO_KNOWLEDGE_BUILD_REQUIRED");
+        if (leaseOwner == null || leaseOwner.isBlank()) {
+            throw new IllegalArgumentException("APVERO_KNOWLEDGE_INDEX_BUILD_KERNEL_INPUT_INVALID");
+        }
+        repository.lockActiveBuildLease(
+                        scope,
+                        claim.id(),
+                        claim.lockVersion(),
+                        leaseOwner,
+                        BuildStatus.EMBEDDING,
+                        BuildStep.EMBEDDING)
+                .orElseThrow(() -> new IllegalStateException(
+                        "APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT"));
+        return persist(scope, claim.id(), expectedRows);
     }
 
     private static void validateBatch(
