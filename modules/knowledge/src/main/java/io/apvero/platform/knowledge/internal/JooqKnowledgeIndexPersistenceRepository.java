@@ -732,11 +732,127 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public VersionRow insertPublishedVersion(WorkspaceScope scope, VersionRow row) {
+        requireScope(scope, row.tenantId(), row.workspaceId());
+        sql.execute("""
+                insert into knowledge_index_version(
+                    id, tenant_id, workspace_id, knowledge_index_id, knowledge_index_build_id,
+                    version, reference, embedding_route_id, embedding_route_reference,
+                    vector_dimension, source_count, chunk_count, artifact_digest, status, published_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, transaction_timestamp())
+                """, row.id(), row.tenantId(), row.workspaceId(), row.knowledgeIndexId(),
+                row.knowledgeIndexBuildId(), row.version(), row.reference(),
+                row.embeddingRouteId(), row.embeddingRouteReference(), row.vectorDimension(),
+                row.sourceCount(), row.chunkCount(), row.artifactDigest(), row.status());
+        return findVersion(scope, row.id()).orElseThrow();
+    }
+
+    @Override
     public Optional<VersionRow> findVersion(WorkspaceScope scope, UUID versionId) {
         return sql.fetchOptional(VERSION_SELECT
                         + " where tenant_id = ? and workspace_id = ? and id = ?",
                         scope.tenantId(), scope.workspaceId(), versionId)
                 .map(this::mapVersion);
+    }
+
+    @Override
+    public List<VersionRow> listVersions(WorkspaceScope scope, UUID indexId) {
+        return sql.fetch(VERSION_SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ? and knowledge_index_id = ?
+                         order by published_at, id
+                         """, scope.tenantId(), scope.workspaceId(), indexId)
+                .map(this::mapVersion);
+    }
+
+    @Override
+    public Optional<BuildRow> persistPublicationArtifact(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            String expectedValidationDigest,
+            String artifactDigest) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set artifact_digest = ?,
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = 'VALIDATING' and current_step = 'VALIDATING'
+                  and lease_until > transaction_timestamp()
+                  and validation_digest = ?
+                  and artifact_digest is null
+                """, artifactDigest, scope.tenantId(), scope.workspaceId(), buildId,
+                expectedVersion, expectedLeaseOwner, expectedValidationDigest);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<BuildRow> completePublication(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            UUID publishedVersionId,
+            int sourceCount,
+            int chunkCount) {
+        int changed = sql.execute("""
+                update knowledge_index_build
+                set status = 'READY',
+                    current_step = 'COMPLETE',
+                    published_version_id = ?,
+                    embedded_entry_count = ?,
+                    validated_entry_count = ?,
+                    lease_owner = null,
+                    lease_until = null,
+                    retryable = false,
+                    next_attempt_at = null,
+                    error_code = null,
+                    error_category = null,
+                    reconciliation_required = false,
+                    failure_metadata = '{}'::jsonb,
+                    completed_at = transaction_timestamp(),
+                    lock_version = lock_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and lock_version = ? and lease_owner = ?
+                  and status = 'VALIDATING' and current_step = 'VALIDATING'
+                  and lease_until > transaction_timestamp()
+                  and artifact_digest is not null
+                  and requested_source_count = ?
+                  and requested_chunk_count = ?
+                  and embedded_entry_count = requested_chunk_count
+                  and validated_entry_count = requested_chunk_count
+                """, publishedVersionId, chunkCount, chunkCount,
+                scope.tenantId(), scope.workspaceId(), buildId,
+                expectedVersion, expectedLeaseOwner, sourceCount, chunkCount);
+        return changed == 1 ? findBuild(scope, buildId) : Optional.empty();
+    }
+
+    @Override
+    public Optional<IndexRow> recordPublishedVersion(
+            WorkspaceScope scope,
+            UUID indexId,
+            long expectedMetadataVersion,
+            int expectedVersionCount,
+            UUID expectedLatestReadyVersionId,
+            UUID publishedVersionId) {
+        int changed = sql.execute("""
+                update knowledge_index
+                set latest_ready_version_id = ?,
+                    version_count = version_count + 1,
+                    metadata_version = metadata_version + 1,
+                    updated_at = transaction_timestamp()
+                where tenant_id = ? and workspace_id = ? and id = ?
+                  and status = 'ACTIVE'
+                  and metadata_version = ?
+                  and version_count = ?
+                  and latest_ready_version_id is not distinct from ?
+                """, publishedVersionId, scope.tenantId(), scope.workspaceId(), indexId,
+                expectedMetadataVersion, expectedVersionCount, expectedLatestReadyVersionId);
+        return changed == 1 ? findIndex(scope, indexId) : Optional.empty();
     }
 
     private RetrievalPolicyRow mapPolicy(Record record) {

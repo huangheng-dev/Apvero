@@ -124,5 +124,34 @@ interface KnowledgeIndexPersistenceRepository {
 
     VersionRow insertVersion(WorkspaceScope scope, VersionRow row);
 
+    VersionRow insertPublishedVersion(WorkspaceScope scope, VersionRow row);
+
     Optional<VersionRow> findVersion(WorkspaceScope scope, UUID versionId);
+
+    List<VersionRow> listVersions(WorkspaceScope scope, UUID indexId);
+
+    Optional<BuildRow> persistPublicationArtifact(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            String expectedValidationDigest,
+            String artifactDigest);
+
+    Optional<BuildRow> completePublication(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            UUID publishedVersionId,
+            int sourceCount,
+            int chunkCount);
+
+    Optional<IndexRow> recordPublishedVersion(
+            WorkspaceScope scope,
+            UUID indexId,
+            long expectedMetadataVersion,
+            int expectedVersionCount,
+            UUID expectedLatestReadyVersionId,
+            UUID publishedVersionId);
 }

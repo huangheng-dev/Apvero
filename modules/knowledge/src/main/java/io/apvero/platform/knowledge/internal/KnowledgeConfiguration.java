@@ -4,6 +4,7 @@ import io.apvero.platform.capability.EmbeddingCapability;
 import io.apvero.platform.capability.EmbeddingInputUnitEstimator;
 import io.apvero.platform.capability.EmbeddingRouteCatalog;
 import io.apvero.platform.governance.ExecutionGovernance;
+import io.apvero.platform.governance.AuditEventCatalog;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
@@ -86,5 +87,14 @@ class KnowledgeConfiguration {
             KnowledgeIndexArtifactAssembler artifacts,
             KnowledgeIndexBuildTransitionKernel kernel) {
         return new KnowledgeIndexBuildValidationOrchestrator(artifacts, kernel);
+    }
+
+    @Bean
+    @ConditionalOnBean(KnowledgeIndexArtifactAssembler.class)
+    KnowledgeIndexPublicationCoordinator knowledgeIndexPublicationCoordinator(
+            KnowledgeIndexPersistenceRepository indexes,
+            KnowledgeIndexArtifactAssembler artifacts,
+            AuditEventCatalog auditEvents) {
+        return new KnowledgeIndexPublicationCoordinator(indexes, artifacts, auditEvents);
     }
 }

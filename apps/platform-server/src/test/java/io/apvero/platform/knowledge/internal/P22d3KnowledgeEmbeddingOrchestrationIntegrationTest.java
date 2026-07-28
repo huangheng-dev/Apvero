@@ -8,6 +8,7 @@ import io.apvero.platform.capability.EmbeddingExecutionResult;
 import io.apvero.platform.governance.ExecutionComponentState;
 import io.apvero.platform.governance.ExecutionGovernance;
 import io.apvero.platform.governance.ExecutionUsageQuality;
+import io.apvero.platform.governance.AuditEventCatalog;
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingLeaseCoordinator.AdmittedComponent;
@@ -76,11 +77,13 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
     @Autowired KnowledgeIndexBuildTransitionKernel kernel;
     @Autowired KnowledgeIndexBuildEmbeddingOrchestrator orchestrator;
     @Autowired KnowledgeIndexBuildValidationOrchestrator validation;
+    @Autowired KnowledgeIndexPublicationCoordinator publication;
     @Autowired KnowledgeEmbeddingBatchExecutor batches;
     @Autowired KnowledgeEmbeddingLeaseCoordinator coordinator;
     @Autowired EmbeddingCapability embeddings;
     @Autowired KnowledgeIndexPersistenceRepository repository;
     @Autowired ExecutionGovernance governance;
+    @Autowired AuditEventCatalog auditEvents;
     @Autowired JdbcTemplate sql;
 
     @Test
@@ -149,6 +152,98 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
         assertThat(validated.build().leaseOwner()).isNull();
         assertThat(validated.build().lockVersion())
                 .isEqualTo(validationClaim.lockVersion() + 1);
+
+        BuildRow publicationClaim =
+                kernel.claim(fixture.scope(), "d4-publication-worker", 1).getFirst();
+        KnowledgeIndexPublicationOutcome published = publication.publish(
+                fixture.scope(), publicationClaim, "d4-publication-worker");
+
+        assertThat(published.build().status()).isEqualTo(BuildStatus.READY);
+        assertThat(published.build().currentStep()).isEqualTo(BuildStep.COMPLETE);
+        assertThat(published.build().artifactDigest())
+                .isEqualTo(published.version().artifactDigest());
+        assertThat(published.build().publishedVersionId())
+                .isEqualTo(published.version().id());
+        assertThat(published.build().lockVersion())
+                .isEqualTo(publicationClaim.lockVersion() + 2);
+        assertThat(published.version().id()).isEqualTo(
+                KnowledgeCanonicalDigests.stableId(
+                        "apvero:knowledge-index-version:" + fixture.buildId()));
+        assertThat(published.version().reference()).startsWith("index-");
+        assertThat(published.version().reference()).endsWith("@1.0.0");
+        assertThat(published.version().publishedAt()).isNotNull();
+        assertThat(published.index().versionCount()).isEqualTo(1);
+        assertThat(published.index().metadataVersion()).isEqualTo(2);
+        assertThat(published.index().latestReadyVersionId())
+                .isEqualTo(published.version().id());
+        assertThat(auditEvents.listAuditEvents(fixture.scope().workspaceId()))
+                .anySatisfy(event -> {
+                    assertThat(event.action())
+                            .isEqualTo("knowledge.index-version.published");
+                    assertThat(event.resourceType())
+                            .isEqualTo("knowledge-index-version");
+                    assertThat(event.resourceId())
+                            .isEqualTo(published.version().id().toString());
+                    assertThat(event.outcome()).isEqualTo("SUCCEEDED");
+                });
+    }
+
+    @Test
+    void rollsBackVersionBuildIndexAndArtifactWhenAuditAppendFails() {
+        Fixture fixture = createFixture();
+        BuildRow publicationClaim = preparePublicationClaim(
+                fixture, "d4-audit-rollback-worker");
+        BuildRow before = repository.findBuild(
+                fixture.scope(), fixture.buildId()).orElseThrow();
+        var indexBefore = repository.findIndex(
+                fixture.scope(), before.knowledgeIndexId()).orElseThrow();
+
+        sql.execute("""
+                create or replace function reject_d4_publication_audit()
+                returns trigger language plpgsql as $$
+                begin
+                    if new.action = 'knowledge.index-version.published' then
+                        raise exception 'injected publication audit failure';
+                    end if;
+                    return new;
+                end;
+                $$
+                """);
+        sql.execute("""
+                create trigger reject_d4_publication_audit_trigger
+                before insert on audit_event
+                for each row execute function reject_d4_publication_audit()
+                """);
+        try {
+            assertThatThrownBy(() -> publication.publish(
+                            fixture.scope(),
+                            publicationClaim,
+                            "d4-audit-rollback-worker"))
+                    .isInstanceOf(RuntimeException.class);
+        } finally {
+            sql.execute("""
+                    drop trigger if exists reject_d4_publication_audit_trigger
+                    on audit_event
+                    """);
+            sql.execute("drop function if exists reject_d4_publication_audit()");
+        }
+
+        BuildRow after = repository.findBuild(
+                fixture.scope(), fixture.buildId()).orElseThrow();
+        var indexAfter = repository.findIndex(
+                fixture.scope(), before.knowledgeIndexId()).orElseThrow();
+        assertThat(after.status()).isEqualTo(BuildStatus.VALIDATING);
+        assertThat(after.currentStep()).isEqualTo(BuildStep.VALIDATING);
+        assertThat(after.artifactDigest()).isNull();
+        assertThat(after.publishedVersionId()).isNull();
+        assertThat(after.lockVersion()).isEqualTo(before.lockVersion());
+        assertThat(repository.listVersions(
+                fixture.scope(), before.knowledgeIndexId())).isEmpty();
+        assertThat(indexAfter.metadataVersion())
+                .isEqualTo(indexBefore.metadataVersion());
+        assertThat(indexAfter.versionCount()).isEqualTo(indexBefore.versionCount());
+        assertThat(indexAfter.latestReadyVersionId())
+                .isEqualTo(indexBefore.latestReadyVersionId());
     }
 
     @Test
@@ -237,6 +332,19 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                 .get()
                 .extracting(component -> component.state())
                 .isEqualTo(expected);
+    }
+
+    private BuildRow preparePublicationClaim(Fixture fixture, String worker) {
+        BuildRow embeddingClaim =
+                kernel.claim(fixture.scope(), worker, 1).getFirst();
+        orchestrator.executeClaim(fixture.scope(), embeddingClaim, worker);
+        BuildRow indexingClaim =
+                kernel.claim(fixture.scope(), worker, 1).getFirst();
+        orchestrator.executeClaim(fixture.scope(), indexingClaim, worker);
+        BuildRow validationClaim =
+                kernel.claim(fixture.scope(), worker, 1).getFirst();
+        validation.executeClaim(fixture.scope(), validationClaim, worker);
+        return kernel.claim(fixture.scope(), worker, 1).getFirst();
     }
 
     private void expireLease(UUID buildId) {
