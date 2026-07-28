@@ -2,6 +2,7 @@ package io.apvero.platform.knowledge.internal;
 
 import io.apvero.platform.capability.EmbeddingCapability;
 import io.apvero.platform.capability.EmbeddingInputUnitEstimator;
+import io.apvero.platform.capability.EmbeddingRouteCatalog;
 import io.apvero.platform.governance.ExecutionGovernance;
 import java.net.http.HttpClient;
 import java.time.Clock;
@@ -64,5 +65,26 @@ class KnowledgeConfiguration {
             EmbeddingCapability embeddings) {
         return new KnowledgeIndexBuildEmbeddingOrchestrator(
                 batches, coordinator, kernel, embeddings);
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "apvero.knowledge",
+            name = "enabled",
+            havingValue = "true")
+    KnowledgeIndexArtifactAssembler knowledgeIndexArtifactAssembler(
+            KnowledgePersistenceRepository knowledge,
+            KnowledgeIndexPersistenceRepository indexes,
+            EmbeddingRouteCatalog routes) {
+        return new KnowledgeIndexArtifactAssembler(
+                knowledge, indexes, routes, new KnowledgeIndexArtifactValidator());
+    }
+
+    @Bean
+    @ConditionalOnBean(KnowledgeIndexArtifactAssembler.class)
+    KnowledgeIndexBuildValidationOrchestrator knowledgeIndexBuildValidationOrchestrator(
+            KnowledgeIndexArtifactAssembler artifacts,
+            KnowledgeIndexBuildTransitionKernel kernel) {
+        return new KnowledgeIndexBuildValidationOrchestrator(artifacts, kernel);
     }
 }

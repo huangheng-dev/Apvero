@@ -207,6 +207,41 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
     }
 
     @Test
+    void expiredIndexingLeaseCannotPersistValidationEvidence() {
+        WorkspaceFixture fixture = createWorkspace("validation-fence");
+        UUID buildId = insertBuild(
+                fixture, 1, 3, OffsetDateTime.now(ZoneOffset.UTC));
+        BuildRow embeddingClaim =
+                kernel.claim(fixture.scope(), "validation-embedding", 1).getFirst();
+        kernel.recordEmbeddingProgressAndRelease(
+                fixture.scope(), embeddingClaim, "validation-embedding", 1, 0);
+        BuildRow transitionClaim =
+                kernel.claim(fixture.scope(), "validation-indexing", 1).getFirst();
+        kernel.advanceToIndexingAndRelease(
+                fixture.scope(), transitionClaim, "validation-indexing");
+        BuildRow staleClaim =
+                kernel.claim(fixture.scope(), "validation-stale", 1).getFirst();
+        expireLeaseAtDatabaseBoundary(buildId);
+
+        assertThatThrownBy(() -> kernel.advanceToValidatingAndRelease(
+                        fixture.scope(),
+                        staleClaim,
+                        "validation-stale",
+                        1,
+                        digest('8')))
+                .isInstanceOf(KnowledgeException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
+
+        assertThat(repository.findBuild(fixture.scope(), buildId))
+                .get()
+                .satisfies(build -> {
+                    assertThat(build.status()).isEqualTo(BuildStatus.INDEXING);
+                    assertThat(build.validatedEntryCount()).isZero();
+                    assertThat(build.validationDigest()).isNull();
+                });
+    }
+
+    @Test
     void retryPermanentExhaustedAndAmbiguousFailuresHaveExactDurableShapes() {
         WorkspaceFixture retryFixture = createWorkspace("retry");
         UUID retryId = insertBuild(retryFixture, 1, 3, OffsetDateTime.now(ZoneOffset.UTC));
