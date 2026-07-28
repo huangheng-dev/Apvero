@@ -42,6 +42,10 @@ class KnowledgeIndexBuildDigestsTest {
             assertThat(KnowledgeIndexBuildDigests.request(scope(), index(), "1.2.3", route(), sources()))
                     .isEqualTo(firstRequest);
             assertThat(firstRequest).matches("^sha256:[a-f0-9]{64}$");
+            assertThat(firstSourceSet)
+                    .isEqualTo("sha256:ec8adf44e3eb6a4cb5b8c67f0af053532f19c276aea745b84d119d1e540e0d3a");
+            assertThat(firstRequest)
+                    .isEqualTo("sha256:45abc51168d811f9d5cc58dae1dcf3f0cf77922cda4f5795761b755d45304d6a");
         } finally {
             Locale.setDefault(originalLocale);
             TimeZone.setDefault(originalTimeZone);
