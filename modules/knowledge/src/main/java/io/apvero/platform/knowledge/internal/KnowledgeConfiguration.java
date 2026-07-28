@@ -94,7 +94,14 @@ class KnowledgeConfiguration {
     KnowledgeIndexPublicationCoordinator knowledgeIndexPublicationCoordinator(
             KnowledgeIndexPersistenceRepository indexes,
             KnowledgeIndexArtifactAssembler artifacts,
-            AuditEventCatalog auditEvents) {
-        return new KnowledgeIndexPublicationCoordinator(indexes, artifacts, auditEvents);
+            AuditEventCatalog auditEvents,
+            KnowledgeIndexPublicationCheckpoint checkpoint) {
+        return new KnowledgeIndexPublicationCoordinator(
+                indexes, artifacts, auditEvents, checkpoint);
+    }
+
+    @Bean
+    KnowledgeIndexPublicationCheckpoint knowledgeIndexPublicationCheckpoint() {
+        return stage -> {};
     }
 }

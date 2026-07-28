@@ -2,6 +2,8 @@ package io.apvero.platform.knowledge.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 import io.apvero.platform.capability.EmbeddingCapability;
 import io.apvero.platform.capability.EmbeddingExecutionResult;
@@ -18,6 +20,8 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Bu
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPublicationCheckpoint.Stage;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPublicationOutcome.Status;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
@@ -25,11 +29,17 @@ import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -78,6 +88,7 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
     @Autowired KnowledgeIndexBuildEmbeddingOrchestrator orchestrator;
     @Autowired KnowledgeIndexBuildValidationOrchestrator validation;
     @Autowired KnowledgeIndexPublicationCoordinator publication;
+    @MockitoBean KnowledgeIndexPublicationCheckpoint publicationCheckpoint;
     @Autowired KnowledgeEmbeddingBatchExecutor batches;
     @Autowired KnowledgeEmbeddingLeaseCoordinator coordinator;
     @Autowired EmbeddingCapability embeddings;
@@ -159,6 +170,7 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                 fixture.scope(), publicationClaim, "d4-publication-worker");
 
         assertThat(published.build().status()).isEqualTo(BuildStatus.READY);
+        assertThat(published.status()).isEqualTo(Status.PUBLISHED);
         assertThat(published.build().currentStep()).isEqualTo(BuildStep.COMPLETE);
         assertThat(published.build().artifactDigest())
                 .isEqualTo(published.version().artifactDigest());
@@ -186,6 +198,186 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                             .isEqualTo(published.version().id().toString());
                     assertThat(event.outcome()).isEqualTo("SUCCEEDED");
                 });
+
+        int auditCount = auditEvents.listAuditEvents(
+                fixture.scope().workspaceId()).size();
+        KnowledgeIndexPublicationOutcome replayed = publication.publish(
+                fixture.scope(), publicationClaim, "d4-publication-worker");
+
+        assertThat(replayed.status()).isEqualTo(Status.REPLAYED);
+        assertThat(replayed.version()).isEqualTo(published.version());
+        assertThat(replayed.build()).isEqualTo(published.build());
+        assertThat(repository.listVersions(
+                fixture.scope(), published.index().id())).hasSize(1);
+        assertThat(auditEvents.listAuditEvents(
+                fixture.scope().workspaceId())).hasSize(auditCount);
+
+        assertThatThrownBy(() -> publication.publish(
+                        fixture.scope(),
+                        withRequestDigest(publicationClaim, digest("conflict")),
+                        "d4-publication-worker"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_PUBLICATION_CONFLICT");
+        assertThat(repository.listVersions(
+                fixture.scope(), published.index().id())).hasSize(1);
+        assertThat(auditEvents.listAuditEvents(
+                fixture.scope().workspaceId())).hasSize(auditCount);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Stage.class)
+    void rollsBackEveryPublicationMutationBoundary(Stage failureStage) {
+        Fixture fixture = createFixture();
+        BuildRow publicationClaim = preparePublicationClaim(
+                fixture, "d4-boundary-worker");
+        BuildRow before = repository.findBuild(
+                fixture.scope(), fixture.buildId()).orElseThrow();
+        var indexBefore = repository.findIndex(
+                fixture.scope(), before.knowledgeIndexId()).orElseThrow();
+        doAnswer(invocation -> {
+            if (invocation.getArgument(0) == failureStage) {
+                throw new IllegalStateException(
+                        "APVERO_KNOWLEDGE_PUBLICATION_TEST_ROLLBACK");
+            }
+            return null;
+        }).when(publicationCheckpoint).after(any(Stage.class));
+
+        assertThatThrownBy(() -> publication.publish(
+                        fixture.scope(), publicationClaim, "d4-boundary-worker"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_PUBLICATION_TEST_ROLLBACK");
+
+        assertPublicationAbsent(fixture, before, indexBefore);
+        assertThat(auditEvents.listAuditEvents(
+                fixture.scope().workspaceId()))
+                .noneMatch(event -> event.action().equals(
+                        "knowledge.index-version.published"));
+    }
+
+    @Test
+    void serializesTwoPublishersIntoOnePublicationAndOneEqualReplay()
+            throws Exception {
+        Fixture fixture = createFixture();
+        BuildRow claim = preparePublicationClaim(
+                fixture, "d4-concurrent-worker");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Future<KnowledgeIndexPublicationOutcome> first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return publication.publish(
+                        fixture.scope(), claim, "d4-concurrent-worker");
+            });
+            Future<KnowledgeIndexPublicationOutcome> second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return publication.publish(
+                        fixture.scope(), claim, "d4-concurrent-worker");
+            });
+            ready.await();
+            start.countDown();
+
+            assertThat(List.of(first.get().status(), second.get().status()))
+                    .containsExactlyInAnyOrder(Status.PUBLISHED, Status.REPLAYED);
+        }
+
+        BuildRow build = repository.findBuild(
+                fixture.scope(), fixture.buildId()).orElseThrow();
+        assertThat(repository.listVersions(
+                fixture.scope(), build.knowledgeIndexId())).hasSize(1);
+        assertThat(auditEvents.listAuditEvents(
+                fixture.scope().workspaceId()))
+                .filteredOn(event -> event.action().equals(
+                        "knowledge.index-version.published"))
+                .hasSize(1);
+    }
+
+    @Test
+    void publishesTwoIndependentIndexesConcurrentlyWithoutLockInversion()
+            throws Exception {
+        Fixture firstFixture = createFixture();
+        Fixture secondFixture = createFixture();
+        BuildRow firstClaim = preparePublicationClaim(
+                firstFixture, "d4-index-race-first");
+        BuildRow secondClaim = preparePublicationClaim(
+                secondFixture, "d4-index-race-second");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Future<KnowledgeIndexPublicationOutcome> first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return publication.publish(
+                        firstFixture.scope(),
+                        firstClaim,
+                        "d4-index-race-first");
+            });
+            Future<KnowledgeIndexPublicationOutcome> second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return publication.publish(
+                        secondFixture.scope(),
+                        secondClaim,
+                        "d4-index-race-second");
+            });
+            ready.await();
+            start.countDown();
+
+            assertThat(first.get().status()).isEqualTo(Status.PUBLISHED);
+            assertThat(second.get().status()).isEqualTo(Status.PUBLISHED);
+        }
+        assertThat(repository.listVersions(
+                firstFixture.scope(), firstClaim.knowledgeIndexId())).hasSize(1);
+        assertThat(repository.listVersions(
+                secondFixture.scope(), secondClaim.knowledgeIndexId())).hasSize(1);
+    }
+
+    @Test
+    void rejectsArchivedIndexAndForeignWorkspaceWithoutPublication() {
+        Fixture archived = createFixture();
+        BuildRow archivedClaim = preparePublicationClaim(
+                archived, "d4-archived-worker");
+        BuildRow archivedBefore = repository.findBuild(
+                archived.scope(), archived.buildId()).orElseThrow();
+        var archivedIndexBefore = repository.findIndex(
+                archived.scope(), archivedBefore.knowledgeIndexId()).orElseThrow();
+        sql.update("""
+                update knowledge_index
+                set status = 'ARCHIVED',
+                    metadata_version = metadata_version + 1,
+                    updated_at = transaction_timestamp()
+                where id = ? and tenant_id = ? and workspace_id = ?
+                """, archivedBefore.knowledgeIndexId(),
+                archived.scope().tenantId(), archived.scope().workspaceId());
+
+        assertThatThrownBy(() -> publication.publish(
+                        archived.scope(),
+                        archivedClaim,
+                        "d4-archived-worker"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_PUBLICATION_ARCHIVED");
+        assertThat(repository.listVersions(
+                archived.scope(), archivedBefore.knowledgeIndexId())).isEmpty();
+        assertThat(repository.findBuild(
+                archived.scope(), archived.buildId()).orElseThrow()
+                .artifactDigest()).isNull();
+
+        Fixture scoped = createFixture();
+        BuildRow scopedClaim = preparePublicationClaim(
+                scoped, "d4-scope-worker");
+        WorkspaceScope foreign = new WorkspaceScope(
+                UUID.randomUUID(), UUID.randomUUID());
+        assertThatThrownBy(() -> publication.publish(
+                        foreign, scopedClaim, "d4-scope-worker"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_NOT_FOUND");
+        BuildRow scopedAfter = repository.findBuild(
+                scoped.scope(), scoped.buildId()).orElseThrow();
+        assertThat(scopedAfter.artifactDigest()).isNull();
+        assertThat(repository.listVersions(
+                scoped.scope(), scopedAfter.knowledgeIndexId())).isEmpty();
+        assertThat(archivedIndexBefore.versionCount()).isZero();
     }
 
     @Test
@@ -345,6 +537,72 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                 kernel.claim(fixture.scope(), worker, 1).getFirst();
         validation.executeClaim(fixture.scope(), validationClaim, worker);
         return kernel.claim(fixture.scope(), worker, 1).getFirst();
+    }
+
+    private void assertPublicationAbsent(
+            Fixture fixture,
+            BuildRow buildBefore,
+            KnowledgeIndexPersistenceRecords.IndexRow indexBefore) {
+        BuildRow buildAfter = repository.findBuild(
+                fixture.scope(), fixture.buildId()).orElseThrow();
+        var indexAfter = repository.findIndex(
+                fixture.scope(), buildBefore.knowledgeIndexId()).orElseThrow();
+        assertThat(buildAfter.status()).isEqualTo(BuildStatus.VALIDATING);
+        assertThat(buildAfter.currentStep()).isEqualTo(BuildStep.VALIDATING);
+        assertThat(buildAfter.artifactDigest()).isNull();
+        assertThat(buildAfter.publishedVersionId()).isNull();
+        assertThat(buildAfter.lockVersion()).isEqualTo(buildBefore.lockVersion());
+        assertThat(repository.listVersions(
+                fixture.scope(), buildBefore.knowledgeIndexId())).isEmpty();
+        assertThat(indexAfter.metadataVersion())
+                .isEqualTo(indexBefore.metadataVersion());
+        assertThat(indexAfter.versionCount()).isEqualTo(indexBefore.versionCount());
+        assertThat(indexAfter.latestReadyVersionId())
+                .isEqualTo(indexBefore.latestReadyVersionId());
+    }
+
+    private static BuildRow withRequestDigest(BuildRow row, String requestDigest) {
+        return new BuildRow(
+                row.id(),
+                row.tenantId(),
+                row.workspaceId(),
+                row.knowledgeIndexId(),
+                row.knowledgeBaseId(),
+                row.requestedVersion(),
+                row.embeddingRouteId(),
+                row.embeddingRouteReference(),
+                row.vectorDimension(),
+                row.maximumInputTokens(),
+                row.maximumBatchSize(),
+                row.normalization(),
+                requestDigest,
+                row.sourceSetDigest(),
+                row.requestedSourceCount(),
+                row.requestedChunkCount(),
+                row.status(),
+                row.currentStep(),
+                row.attemptCount(),
+                row.maximumAttempts(),
+                row.retryable(),
+                row.nextAttemptAt(),
+                row.leaseOwner(),
+                row.leaseUntil(),
+                row.lockVersion(),
+                row.cancellationRequested(),
+                row.embeddedEntryCount(),
+                row.validatedEntryCount(),
+                row.lastDurableChunkOrdinal(),
+                row.validationDigest(),
+                row.artifactDigest(),
+                row.publishedVersionId(),
+                row.errorCode(),
+                row.errorCategory(),
+                row.reconciliationRequired(),
+                row.failureMetadataJson(),
+                row.startedAt(),
+                row.completedAt(),
+                row.createdAt(),
+                row.updatedAt());
     }
 
     private void expireLease(UUID buildId) {

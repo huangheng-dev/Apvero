@@ -8,6 +8,8 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Bu
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.VersionRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPublicationCheckpoint.Stage;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPublicationOutcome.Status;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Propagation;
@@ -21,14 +23,17 @@ class KnowledgeIndexPublicationCoordinator {
     private final KnowledgeIndexPersistenceRepository indexes;
     private final KnowledgeIndexArtifactAssembler artifacts;
     private final AuditEventCatalog auditEvents;
+    private final KnowledgeIndexPublicationCheckpoint checkpoint;
 
     KnowledgeIndexPublicationCoordinator(
             KnowledgeIndexPersistenceRepository indexes,
             KnowledgeIndexArtifactAssembler artifacts,
-            AuditEventCatalog auditEvents) {
+            AuditEventCatalog auditEvents,
+            KnowledgeIndexPublicationCheckpoint checkpoint) {
         this.indexes = indexes;
         this.artifacts = artifacts;
         this.auditEvents = auditEvents;
+        this.checkpoint = checkpoint;
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
@@ -43,12 +48,20 @@ class KnowledgeIndexPublicationCoordinator {
                 .orElseThrow(() -> new IllegalStateException(
                         "APVERO_KNOWLEDGE_INDEX_NOT_FOUND"));
 
-        requireClaimIdentity(claim, lockedBuild);
-        requireActiveIndex(lockedIndex);
         List<VersionRow> existingVersions =
                 indexes.listVersions(scope, lockedIndex.id());
         requireConsistentIndex(lockedIndex, existingVersions);
+        if (lockedBuild.status() == BuildStatus.READY) {
+            return replay(
+                    scope,
+                    claim,
+                    lockedBuild,
+                    lockedIndex,
+                    existingVersions);
+        }
 
+        requireClaimIdentity(claim, lockedBuild);
+        requireActiveIndex(lockedIndex);
         BuildRow activeBuild = indexes.lockActiveBuildLease(
                         scope,
                         lockedBuild.id(),
@@ -75,6 +88,7 @@ class KnowledgeIndexPublicationCoordinator {
                         artifact.artifactDigest())
                 .orElseThrow(() -> new IllegalStateException(
                         "APVERO_KNOWLEDGE_INDEX_BUILD_CONCURRENT_MODIFICATION"));
+        checkpoint.after(Stage.ARTIFACT_PERSISTED);
 
         UUID versionId = KnowledgeCanonicalDigests.stableId(
                 "apvero:knowledge-index-version:" + activeBuild.id());
@@ -94,6 +108,7 @@ class KnowledgeIndexPublicationCoordinator {
                 artifact.artifactDigest(),
                 BuildStatus.READY.name(),
                 null));
+        checkpoint.after(Stage.VERSION_INSERTED);
 
         BuildRow readyBuild = indexes.completePublication(
                         scope,
@@ -105,6 +120,7 @@ class KnowledgeIndexPublicationCoordinator {
                         artifact.chunkCount())
                 .orElseThrow(() -> new IllegalStateException(
                         "APVERO_KNOWLEDGE_INDEX_BUILD_CONCURRENT_MODIFICATION"));
+        checkpoint.after(Stage.BUILD_COMPLETED);
         IndexRow updatedIndex = indexes.recordPublishedVersion(
                         scope,
                         lockedIndex.id(),
@@ -114,6 +130,7 @@ class KnowledgeIndexPublicationCoordinator {
                         version.id())
                 .orElseThrow(() -> new IllegalStateException(
                         "APVERO_KNOWLEDGE_INDEX_CONCURRENT_MODIFICATION"));
+        checkpoint.after(Stage.INDEX_UPDATED);
 
         auditEvents.append(
                 scope.workspaceId(),
@@ -124,7 +141,59 @@ class KnowledgeIndexPublicationCoordinator {
                 "SUCCEEDED",
                 null,
                 "knowledge-publication-" + activeBuild.id());
-        return new KnowledgeIndexPublicationOutcome(readyBuild, updatedIndex, version);
+        checkpoint.after(Stage.AUDIT_APPENDED);
+        return new KnowledgeIndexPublicationOutcome(
+                readyBuild, updatedIndex, version, Status.PUBLISHED);
+    }
+
+    private KnowledgeIndexPublicationOutcome replay(
+            WorkspaceScope scope,
+            BuildRow claim,
+            BuildRow readyBuild,
+            IndexRow index,
+            List<VersionRow> versions) {
+        requireReplayClaimIdentity(claim, readyBuild);
+        UUID expectedVersionId = KnowledgeCanonicalDigests.stableId(
+                "apvero:knowledge-index-version:" + readyBuild.id());
+        VersionRow version = indexes.findVersion(scope, expectedVersionId)
+                .orElseThrow(KnowledgeIndexPublicationCoordinator::publicationConflict);
+        KnowledgeIndexArtifactManifest artifact;
+        try {
+            artifact = artifacts.reconstruct(scope, readyBuild);
+        } catch (IllegalStateException exception) {
+            throw publicationConflict();
+        }
+        boolean versionBelongsToIndex = versions.stream()
+                .anyMatch(candidate -> candidate.id().equals(version.id()));
+        boolean equal = versionBelongsToIndex
+                && expectedVersionId.equals(readyBuild.publishedVersionId())
+                && readyBuild.currentStep() == BuildStep.COMPLETE
+                && readyBuild.requestedSourceCount() == artifact.sourceCount()
+                && readyBuild.requestedChunkCount() == artifact.chunkCount()
+                && readyBuild.embeddedEntryCount() == artifact.entryCount()
+                && readyBuild.validatedEntryCount() == artifact.entryCount()
+                && artifact.validationDigest().equals(readyBuild.validationDigest())
+                && artifact.artifactDigest().equals(readyBuild.artifactDigest())
+                && version.tenantId().equals(scope.tenantId())
+                && version.workspaceId().equals(scope.workspaceId())
+                && version.knowledgeIndexId().equals(index.id())
+                && version.knowledgeIndexBuildId().equals(readyBuild.id())
+                && version.version().equals(readyBuild.requestedVersion())
+                && version.reference().equals(
+                        index.slug() + "@" + readyBuild.requestedVersion())
+                && version.embeddingRouteId().equals(artifact.embeddingRouteId())
+                && version.embeddingRouteReference().equals(
+                        artifact.embeddingRouteReference())
+                && version.vectorDimension() == artifact.vectorDimension()
+                && version.sourceCount() == artifact.sourceCount()
+                && version.chunkCount() == artifact.chunkCount()
+                && version.artifactDigest().equals(artifact.artifactDigest())
+                && BuildStatus.READY.name().equals(version.status());
+        if (!equal) {
+            throw publicationConflict();
+        }
+        return new KnowledgeIndexPublicationOutcome(
+                readyBuild, index, version, Status.REPLAYED);
     }
 
     private static void requireClaimIdentity(BuildRow claim, BuildRow locked) {
@@ -137,6 +206,21 @@ class KnowledgeIndexPublicationCoordinator {
             throw new IllegalStateException(
                     "APVERO_KNOWLEDGE_INDEX_BUILD_CLAIM_MISMATCH");
         }
+    }
+
+    private static void requireReplayClaimIdentity(
+            BuildRow claim,
+            BuildRow locked) {
+        try {
+            requireClaimIdentity(claim, locked);
+        } catch (IllegalStateException exception) {
+            throw publicationConflict();
+        }
+    }
+
+    private static IllegalStateException publicationConflict() {
+        return new IllegalStateException(
+                "APVERO_KNOWLEDGE_PUBLICATION_CONFLICT");
     }
 
     private static void requireActiveIndex(IndexRow index) {

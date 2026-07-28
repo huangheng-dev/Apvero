@@ -7,4 +7,11 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Ve
 record KnowledgeIndexPublicationOutcome(
         BuildRow build,
         IndexRow index,
-        VersionRow version) {}
+        VersionRow version,
+        Status status) {
+
+    enum Status {
+        PUBLISHED,
+        REPLAYED
+    }
+}
