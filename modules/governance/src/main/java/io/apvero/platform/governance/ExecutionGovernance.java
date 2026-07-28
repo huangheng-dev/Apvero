@@ -1,5 +1,6 @@
 package io.apvero.platform.governance;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ExecutionGovernance {
@@ -27,6 +28,13 @@ public interface ExecutionGovernance {
 
     default void requireReconciliation(ExecutionComponentReconciliation reconciliation) {
         throw new UnsupportedOperationException("APVERO_GOVERNANCE_COMPONENT_RECONCILIATION_DISABLED");
+    }
+
+    default Optional<ExecutionComponentSnapshot> findComponent(
+            UUID workspaceId,
+            UUID reservationId,
+            String idempotencyIdentity) {
+        throw new UnsupportedOperationException("APVERO_GOVERNANCE_COMPONENT_SNAPSHOT_DISABLED");
     }
 
     void settle(UUID reservationId, long actualCostMicros, boolean succeeded);

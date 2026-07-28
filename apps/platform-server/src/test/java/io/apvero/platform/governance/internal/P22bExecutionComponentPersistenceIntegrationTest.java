@@ -9,6 +9,7 @@ import io.apvero.platform.governance.ExecutionComponentDispatch;
 import io.apvero.platform.governance.ExecutionComponentReconciliation;
 import io.apvero.platform.governance.ExecutionComponentRequest;
 import io.apvero.platform.governance.ExecutionComponentSettlement;
+import io.apvero.platform.governance.ExecutionComponentState;
 import io.apvero.platform.governance.ExecutionComponentType;
 import io.apvero.platform.governance.ExecutionGovernance;
 import io.apvero.platform.governance.ExecutionReservationRequest;
@@ -28,6 +29,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -76,6 +78,7 @@ class P22bExecutionComponentPersistenceIntegrationTest {
     @Autowired ExecutionGovernance governance;
     @Autowired GovernanceMaintenance maintenance;
     @Autowired JdbcTemplate sql;
+    @Autowired TransactionTemplate transactions;
 
     @Test
     void componentLedgerIsScopedIdempotentAndOnlyAllowsForwardTransitions() {
@@ -187,6 +190,17 @@ class P22bExecutionComponentPersistenceIntegrationTest {
                 new WorkspaceScope(TENANT_ID, WORKSPACE_ID), first.reservationId()))
                 .hasSize(2)
                 .allMatch(row -> "RESERVED".equals(row.status()));
+        assertThat(governance.findComponent(
+                        WORKSPACE_ID, first.reservationId(), "batch-0"))
+                .get()
+                .satisfies(snapshot -> {
+                    assertThat(snapshot.state()).isEqualTo(ExecutionComponentState.RESERVED);
+                    assertThat(snapshot.estimatedUnits()).isEqualTo(100);
+                    assertThat(snapshot.actualUnits()).isNull();
+                    assertThat(snapshot.providerRequestIdentity()).isNull();
+                });
+        assertThat(governance.findComponent(
+                createScope().workspaceId(), first.reservationId(), "batch-0")).isEmpty();
 
         ExecutionReservationRequest conflict = new ExecutionReservationRequest(
                 request.workspaceId(), request.subject(), request.actorId(), request.traceId(),
@@ -203,6 +217,13 @@ class P22bExecutionComponentPersistenceIntegrationTest {
                 first.reservationId(), "batch-0", null));
         governance.markDispatched(new ExecutionComponentDispatch(
                 first.reservationId(), "batch-0", "provider-request-0"));
+        assertThat(governance.findComponent(
+                        WORKSPACE_ID, first.reservationId(), "batch-0"))
+                .get()
+                .satisfies(snapshot -> {
+                    assertThat(snapshot.state()).isEqualTo(ExecutionComponentState.DISPATCHED);
+                    assertThat(snapshot.providerRequestIdentity()).isEqualTo("provider-request-0");
+                });
         governance.markDispatched(new ExecutionComponentDispatch(
                 first.reservationId(), "batch-0", "provider-request-0"));
         assertThatThrownBy(() -> governance.markDispatched(new ExecutionComponentDispatch(
@@ -215,6 +236,15 @@ class P22bExecutionComponentPersistenceIntegrationTest {
                 ExecutionUsageQuality.ACTUAL, true, null);
         governance.settle(firstSettlement);
         governance.settle(firstSettlement);
+        assertThat(governance.findComponent(
+                        WORKSPACE_ID, first.reservationId(), "batch-0"))
+                .get()
+                .satisfies(snapshot -> {
+                    assertThat(snapshot.state()).isEqualTo(ExecutionComponentState.SUCCEEDED);
+                    assertThat(snapshot.actualUnits()).isEqualTo(90);
+                    assertThat(snapshot.actualCostMicros()).isEqualTo(7);
+                    assertThat(snapshot.usageQuality()).isEqualTo(ExecutionUsageQuality.ACTUAL);
+                });
         assertThatThrownBy(() -> governance.settle(new ExecutionComponentSettlement(
                 first.reservationId(), "batch-0", 91, 7, "USD",
                 ExecutionUsageQuality.ACTUAL, true, null)))
@@ -260,6 +290,29 @@ class P22bExecutionComponentPersistenceIntegrationTest {
         assertThat(ambiguousComponent.status()).isEqualTo("RECONCILIATION_REQUIRED");
         assertThat(ambiguousComponent.actualCostMicros()).isNull();
         assertThat(parentStatus(ambiguous.reservationId())).isEqualTo("RESERVED");
+    }
+
+    @Test
+    void componentAdmissionParticipatesInTheCallerTransaction() {
+        UUID embeddingRouteId = createEmbeddingRoute("caller-transaction");
+        String traceId = "caller-transaction-" + UUID.randomUUID();
+        transactions.executeWithoutResult(status -> {
+            governance.admit(new ExecutionReservationRequest(
+                    WORKSPACE_ID,
+                    ExecutionSubject.knowledgeIngestion(UUID.randomUUID()),
+                    "p2.2d-test",
+                    traceId,
+                    List.of(embeddingComponent(
+                            embeddingRouteId,
+                            "caller-transaction@1",
+                            "caller-transaction-0",
+                            1))));
+            status.setRollbackOnly();
+        });
+
+        assertThat(sql.queryForObject("""
+                select count(*) from execution_reservation where trace_id = ?
+                """, Integer.class, traceId)).isZero();
     }
 
     @Test

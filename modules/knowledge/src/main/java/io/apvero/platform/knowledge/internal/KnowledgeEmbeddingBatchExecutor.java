@@ -30,6 +30,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 final class KnowledgeEmbeddingBatchExecutor {
@@ -132,7 +133,98 @@ final class KnowledgeEmbeddingBatchExecutor {
                 selected);
     }
 
+    Optional<KnowledgeEmbeddingBatchPlan> prepareNext(
+            WorkspaceScope scope,
+            BuildRow claim,
+            String leaseOwner) {
+        Objects.requireNonNull(scope, "APVERO_WORKSPACE_SCOPE_REQUIRED");
+        Objects.requireNonNull(claim, "APVERO_KNOWLEDGE_BUILD_REQUIRED");
+        if (leaseOwner == null || leaseOwner.isBlank()
+                || !scope.tenantId().equals(claim.tenantId())
+                || !scope.workspaceId().equals(claim.workspaceId())) {
+            throw new IllegalArgumentException("APVERO_KNOWLEDGE_INDEX_BUILD_KERNEL_INPUT_INVALID");
+        }
+        BuildRow current = indexes.findBuild(scope, claim.id())
+                .orElseThrow(() -> new IllegalArgumentException("APVERO_KNOWLEDGE_BUILD_NOT_FOUND"));
+        if (current.status() != BuildStatus.EMBEDDING
+                || current.currentStep() != BuildStep.EMBEDDING
+                || current.lockVersion() != claim.lockVersion()
+                || !leaseOwner.equals(current.leaseOwner())) {
+            throw new IllegalStateException("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
+        }
+
+        EmbeddingRouteSnapshot route =
+                embeddings.resolveEmbeddingRoute(scope.workspaceId(), current.embeddingRouteId());
+        validateRoute(scope, current, route);
+        List<CandidateChunk> canonical = canonicalChunks(scope, current);
+        int cursor = current.embeddedEntryCount();
+        if (cursor < 0 || cursor > canonical.size()
+                || canonical.size() != current.requestedChunkCount()) {
+            throw new IllegalStateException("APVERO_KNOWLEDGE_BUILD_PROGRESS_INCONSISTENT");
+        }
+        if (cursor == canonical.size()) {
+            validateDurableCursor(scope, current, canonical, cursor, cursor);
+            return Optional.empty();
+        }
+
+        List<UUID> selected = new ArrayList<>();
+        long aggregateUnits = 0;
+        int limit = Math.min(route.profile().maximumBatchSize(), current.maximumBatchSize());
+        long unitLimit = Math.min(
+                route.profile().maximumInputTokens(), current.maximumInputTokens());
+        for (int ordinal = cursor; ordinal < canonical.size() && selected.size() < limit; ordinal++) {
+            CandidateChunk candidate = canonical.get(ordinal);
+            long itemUnits = estimator.estimateUnits(candidate.chunk().text());
+            if (itemUnits > unitLimit) {
+                if (selected.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "APVERO_KNOWLEDGE_EMBEDDING_CHUNK_OVERSIZED");
+                }
+                break;
+            }
+            long next;
+            try {
+                next = Math.addExact(aggregateUnits, itemUnits);
+            } catch (ArithmeticException exception) {
+                throw new IllegalArgumentException(
+                        "APVERO_KNOWLEDGE_EMBEDDING_INPUT_LIMIT_EXCEEDED", exception);
+            }
+            if (next > unitLimit) {
+                break;
+            }
+            aggregateUnits = next;
+            selected.add(candidate.chunk().id());
+        }
+        if (selected.isEmpty()) {
+            throw new IllegalStateException("APVERO_KNOWLEDGE_EMBEDDING_BATCH_EMPTY");
+        }
+
+        int batchEndExclusive = Math.addExact(cursor, selected.size());
+        validateDurableCursor(scope, current, canonical, cursor, batchEndExclusive);
+        return Optional.of(prepare(new KnowledgeEmbeddingBatchRequest(
+                scope, current.id(), cursor, selected)));
+    }
+
     KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome persist(
+            KnowledgeEmbeddingBatchPlan plan,
+            EmbeddingExecutionResult result) {
+        return writer.persist(plan.scope(), plan.build().id(), expectedRows(plan, result));
+    }
+
+    KnowledgeEmbeddingEntryBatchWriter.BatchWriteOutcome persistUnderLease(
+            KnowledgeEmbeddingBatchPlan plan,
+            EmbeddingExecutionResult result,
+            BuildRow claim,
+            String leaseOwner) {
+        if (!plan.build().id().equals(claim.id())
+                || plan.build().lockVersion() != claim.lockVersion()) {
+            throw new IllegalStateException("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
+        }
+        return writer.persistUnderLease(
+                plan.scope(), claim, leaseOwner, expectedRows(plan, result));
+    }
+
+    private List<EntryRow> expectedRows(
             KnowledgeEmbeddingBatchPlan plan,
             EmbeddingExecutionResult result) {
         Objects.requireNonNull(plan, "APVERO_KNOWLEDGE_EMBEDDING_BATCH_PLAN_REQUIRED");
@@ -171,7 +263,7 @@ final class KnowledgeEmbeddingBatchExecutor {
                     plan.build().embeddingRouteReference(),
                     createdAt));
         }
-        return writer.persist(plan.scope(), plan.build().id(), rows);
+        return List.copyOf(rows);
     }
 
     private List<CandidateChunk> canonicalChunks(WorkspaceScope scope, BuildRow build) {
@@ -235,6 +327,54 @@ final class KnowledgeEmbeddingBatchExecutor {
             }
         }
         return KnowledgeEmbeddingBatchState.COMPLETE_EQUAL;
+    }
+
+    private void validateDurableCursor(
+            WorkspaceScope scope,
+            BuildRow build,
+            List<CandidateChunk> canonical,
+            int cursor,
+            int batchEndExclusive) {
+        Map<Integer, EntryRow> byOrdinal = new HashMap<>();
+        for (EntryRow row : indexes.listEntries(scope, build.id())) {
+            if (byOrdinal.put(row.entryOrdinal(), row) != null
+                    || row.entryOrdinal() < 0
+                    || row.entryOrdinal() >= canonical.size()) {
+                throw new IllegalStateException("APVERO_KNOWLEDGE_ENTRY_BATCH_CONFLICT");
+            }
+        }
+        for (int ordinal = 0; ordinal < cursor; ordinal++) {
+            EntryRow row = byOrdinal.get(ordinal);
+            CandidateChunk candidate = canonical.get(ordinal);
+            if (row == null || !samePersistedLineage(row, build, candidate)) {
+                throw new IllegalStateException(
+                        "APVERO_KNOWLEDGE_BUILD_PROGRESS_INCONSISTENT");
+            }
+        }
+        boolean artifactAhead = byOrdinal.keySet().stream()
+                .anyMatch(ordinal -> ordinal >= batchEndExclusive);
+        if (artifactAhead) {
+            throw new IllegalStateException("APVERO_KNOWLEDGE_ENTRY_BATCH_CONFLICT");
+        }
+    }
+
+    private static boolean samePersistedLineage(
+            EntryRow row,
+            BuildRow build,
+            CandidateChunk candidate) {
+        return row.knowledgeIndexBuildId().equals(build.id())
+                && row.knowledgeIndexId().equals(build.knowledgeIndexId())
+                && row.knowledgeBaseId().equals(build.knowledgeBaseId())
+                && row.sourceId().equals(candidate.revision().sourceId())
+                && row.sourceRevisionId().equals(candidate.revision().sourceRevisionId())
+                && row.documentId().equals(candidate.chunk().documentId())
+                && row.chunkId().equals(candidate.chunk().id())
+                && row.entryOrdinal() == candidate.entryOrdinal()
+                && row.normalizedInputDigest().equals(candidate.chunk().contentDigest())
+                && row.vectorDimension() == build.vectorDimension()
+                && row.vectorDigest().equals(vectorDigest(row.embedding()))
+                && row.embeddingRouteId().equals(build.embeddingRouteId())
+                && row.embeddingRouteReference().equals(build.embeddingRouteReference());
     }
 
     private static boolean sameLineage(

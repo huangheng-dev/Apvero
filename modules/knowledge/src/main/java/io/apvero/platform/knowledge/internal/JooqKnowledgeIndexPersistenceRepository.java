@@ -212,6 +212,28 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public Optional<BuildRow> lockActiveBuildLease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep) {
+        return sql.fetchOptional(BUILD_SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ? and id = ?
+                           and lock_version = ? and lease_owner = ?
+                           and status = ? and current_step = ?
+                           and lease_until > transaction_timestamp()
+                         for update
+                         """,
+                        scope.tenantId(), scope.workspaceId(), buildId,
+                        expectedVersion, expectedLeaseOwner,
+                        expectedStatus.name(), expectedStep.name())
+                .map(this::mapBuild);
+    }
+
+    @Override
     public Optional<BuildRow> retryFailedBuild(
             WorkspaceScope scope,
             UUID buildId,

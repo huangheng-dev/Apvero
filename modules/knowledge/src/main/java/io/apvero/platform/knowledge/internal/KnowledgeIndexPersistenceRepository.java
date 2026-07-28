@@ -38,6 +38,14 @@ interface KnowledgeIndexPersistenceRepository {
 
     Optional<BuildRow> lockBuild(WorkspaceScope scope, UUID buildId);
 
+    Optional<BuildRow> lockActiveBuildLease(
+            WorkspaceScope scope,
+            UUID buildId,
+            long expectedVersion,
+            String expectedLeaseOwner,
+            BuildStatus expectedStatus,
+            BuildStep expectedStep);
+
     Optional<BuildRow> retryFailedBuild(
             WorkspaceScope scope,
             UUID buildId,

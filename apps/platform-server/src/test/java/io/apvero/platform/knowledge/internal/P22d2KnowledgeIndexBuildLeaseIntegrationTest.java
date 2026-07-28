@@ -138,6 +138,8 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
         WorkspaceFixture fixture = createWorkspace("stale");
         UUID buildId = insertBuild(fixture, 1, 3, OffsetDateTime.now(ZoneOffset.UTC));
         BuildRow predecessor = kernel.claim(fixture.scope(), "worker-old", 1).getFirst();
+        assertThat(kernel.requireActiveLease(
+                fixture.scope(), predecessor, "worker-old")).isEqualTo(predecessor);
         expireLeaseAtDatabaseBoundary(buildId);
 
         BuildRow successor = kernel.claim(fixture.scope(), "worker-new", 1).getFirst();
@@ -146,6 +148,10 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
         assertThat(successor.attemptCount()).isEqualTo(predecessor.attemptCount());
         assertThat(successor.lockVersion()).isGreaterThan(predecessor.lockVersion());
         assertThatThrownBy(() -> kernel.renew(fixture.scope(), predecessor, "worker-old"))
+                .isInstanceOf(KnowledgeException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
+        assertThatThrownBy(() -> kernel.requireActiveLease(
+                        fixture.scope(), predecessor, "worker-old"))
                 .isInstanceOf(KnowledgeException.class)
                 .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
         assertThatThrownBy(() -> kernel.recordEmbeddingProgressAndRelease(

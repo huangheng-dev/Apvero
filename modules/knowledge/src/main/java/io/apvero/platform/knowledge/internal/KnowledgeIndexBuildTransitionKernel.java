@@ -59,6 +59,23 @@ class KnowledgeIndexBuildTransitionKernel {
     }
 
     @Transactional
+    BuildRow requireActiveLease(
+            WorkspaceScope scope,
+            BuildRow claim,
+            String leaseOwner) {
+        requireClaim(scope, claim, leaseOwner);
+        requireActive(claim);
+        return repository.lockActiveBuildLease(
+                        scope,
+                        claim.id(),
+                        claim.lockVersion(),
+                        leaseOwner,
+                        claim.status(),
+                        claim.currentStep())
+                .orElseThrow(KnowledgeIndexBuildTransitionKernel::leaseConflict);
+    }
+
+    @Transactional
     BuildRow recordEmbeddingProgressAndRelease(
             WorkspaceScope scope,
             BuildRow claim,
