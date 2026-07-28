@@ -14,6 +14,7 @@ import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingLeaseCoordinator.
 import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.RecoveryAction;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,7 @@ import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -73,6 +75,7 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
 
     @Autowired KnowledgeIndexBuildTransitionKernel kernel;
     @Autowired KnowledgeIndexBuildEmbeddingOrchestrator orchestrator;
+    @Autowired KnowledgeIndexBuildValidationOrchestrator validation;
     @Autowired KnowledgeEmbeddingBatchExecutor batches;
     @Autowired KnowledgeEmbeddingLeaseCoordinator coordinator;
     @Autowired EmbeddingCapability embeddings;
@@ -81,7 +84,7 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
     @Autowired JdbcTemplate sql;
 
     @Test
-    void closesOneGovernedBatchAndAdvancesTheNextClaimToIndexing() {
+    void closesGovernedEmbeddingAndAdvancesCompleteArtifactToValidating() {
         Fixture fixture = createFixture();
         BuildRow claim = kernel.claim(fixture.scope(), "d3-worker-a", 1).getFirst();
 
@@ -128,6 +131,24 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
         assertThat(indexed.providerInvoked()).isFalse();
         assertThat(indexed.build().status()).isEqualTo(BuildStatus.INDEXING);
         assertThat(indexed.build().currentStep()).isEqualTo(BuildStep.INDEXING);
+
+        BuildRow validationClaim =
+                kernel.claim(fixture.scope(), "d4-validation-worker", 1).getFirst();
+        KnowledgeIndexValidationClaimOutcome validated =
+                validation.executeClaim(
+                        fixture.scope(), validationClaim, "d4-validation-worker");
+
+        assertThat(validated.status())
+                .isEqualTo(KnowledgeIndexValidationClaimOutcome.Status.ADVANCED_TO_VALIDATING);
+        assertThat(validated.build().status()).isEqualTo(BuildStatus.VALIDATING);
+        assertThat(validated.build().currentStep()).isEqualTo(BuildStep.VALIDATING);
+        assertThat(validated.build().validatedEntryCount()).isEqualTo(1);
+        assertThat(validated.build().validationDigest())
+                .matches("^sha256:[a-f0-9]{64}$");
+        assertThat(validated.build().artifactDigest()).isNull();
+        assertThat(validated.build().leaseOwner()).isNull();
+        assertThat(validated.build().lockVersion())
+                .isEqualTo(validationClaim.lockVersion() + 1);
     }
 
     @Test
@@ -331,10 +352,19 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                 values (?, ?, ?, ?, ?, 'D3 Index', 'ACTIVE', 1, 0, ?, ?)
                 """, indexId, tenantId, workspaceId, baseId, "index-" + suffix, now, now);
 
+        String sourceSetDigest = KnowledgeIndexBuildDigests.sourceSet(List.of(
+                new BuildSourceCandidateRow(
+                        sourceId,
+                        revisionId,
+                        digest("source"),
+                        "apvero-text@1.0.0",
+                        "apvero-boundary@1.0.0",
+                        1,
+                        1)));
         BuildRow build = repository.insertBuild(scope, new BuildRow(
                 buildId, tenantId, workspaceId, indexId, baseId, "1.0.0",
                 routeId, routeName + "@1", 256, 8192, 64, "L2",
-                digest("request"), digest("source-set"), 1, 1,
+                digest("request"), sourceSetDigest, 1, 1,
                 BuildStatus.QUEUED, BuildStep.EMBEDDING, 0, 3, false,
                 null, null, null, 1, false, 0, 0, null,
                 null, null, null, null, null, false, "{}",
