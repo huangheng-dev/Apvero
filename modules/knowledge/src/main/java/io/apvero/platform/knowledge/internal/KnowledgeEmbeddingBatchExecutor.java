@@ -16,7 +16,6 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.En
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.ChunkRow;
 import io.apvero.platform.knowledge.internal.KnowledgePersistenceRecords.DocumentRow;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -34,7 +33,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 final class KnowledgeEmbeddingBatchExecutor {
-    private static final String SHA256_PREFIX = "sha256:";
     private final KnowledgePersistenceRepository knowledge;
     private final KnowledgeIndexPersistenceRepository indexes;
     private final EmbeddingCapability embeddings;
@@ -84,7 +82,7 @@ final class KnowledgeEmbeddingBatchExecutor {
                 throw new IllegalArgumentException("APVERO_KNOWLEDGE_EMBEDDING_CHUNK_ORDER_INVALID");
             }
             previousOrdinal = candidate.entryOrdinal();
-            String recomputedDigest = sha256(candidate.chunk().text().getBytes(StandardCharsets.UTF_8));
+            String recomputedDigest = KnowledgeCanonicalDigests.text(candidate.chunk().text());
             if (!recomputedDigest.equals(candidate.chunk().contentDigest())) {
                 throw new IllegalStateException("APVERO_KNOWLEDGE_CHUNK_DIGEST_MISMATCH");
             }
@@ -242,7 +240,7 @@ final class KnowledgeEmbeddingBatchExecutor {
             PlannedChunk chunk = plan.orderedChunks().get(position);
             EmbeddingVectorOutput output = result.orderedOutputs().get(position);
             rows.add(new EntryRow(
-                    stableId("apvero:knowledge-index-entry:"
+                    KnowledgeCanonicalDigests.stableId("apvero:knowledge-index-entry:"
                             + plan.build().id() + ':' + chunk.chunkId()),
                     plan.scope().tenantId(),
                     plan.scope().workspaceId(),
@@ -256,7 +254,7 @@ final class KnowledgeEmbeddingBatchExecutor {
                     chunk.entryOrdinal(),
                     output.vector(),
                     result.dimension(),
-                    vectorDigest(output.vector()),
+                    KnowledgeCanonicalDigests.vector(output.vector()),
                     chunk.contentDigest(),
                     plan.batchOrdinal(),
                     plan.build().embeddingRouteId(),
@@ -372,7 +370,7 @@ final class KnowledgeEmbeddingBatchExecutor {
                 && row.entryOrdinal() == candidate.entryOrdinal()
                 && row.normalizedInputDigest().equals(candidate.chunk().contentDigest())
                 && row.vectorDimension() == build.vectorDimension()
-                && row.vectorDigest().equals(vectorDigest(row.embedding()))
+                && row.vectorDigest().equals(KnowledgeCanonicalDigests.vector(row.embedding()))
                 && row.embeddingRouteId().equals(build.embeddingRouteId())
                 && row.embeddingRouteReference().equals(build.embeddingRouteReference());
     }
@@ -382,7 +380,7 @@ final class KnowledgeEmbeddingBatchExecutor {
             BuildRow build,
             int batchOrdinal,
             PlannedChunk chunk) {
-        return row.id().equals(stableId(
+        return row.id().equals(KnowledgeCanonicalDigests.stableId(
                         "apvero:knowledge-index-entry:" + build.id() + ':' + chunk.chunkId()))
                 && row.knowledgeIndexBuildId().equals(build.id())
                 && row.knowledgeIndexId().equals(build.knowledgeIndexId())
@@ -395,7 +393,7 @@ final class KnowledgeEmbeddingBatchExecutor {
                 && row.normalizedInputDigest().equals(chunk.contentDigest())
                 && row.batchOrdinal() == batchOrdinal
                 && row.vectorDimension() == build.vectorDimension()
-                && row.vectorDigest().equals(vectorDigest(row.embedding()))
+                && row.vectorDigest().equals(KnowledgeCanonicalDigests.vector(row.embedding()))
                 && row.embeddingRouteId().equals(build.embeddingRouteId())
                 && row.embeddingRouteReference().equals(build.embeddingRouteReference());
     }
@@ -430,29 +428,6 @@ final class KnowledgeEmbeddingBatchExecutor {
             update(digest, chunk.contentDigest());
         }
         return "knowledge-embedding:" + HexFormat.of().formatHex(digest.digest());
-    }
-
-    private static String vectorDigest(List<Float> vector) {
-        ByteBuffer bytes = ByteBuffer.allocate(Math.multiplyExact(vector.size(), Float.BYTES))
-                .order(ByteOrder.BIG_ENDIAN);
-        for (Float value : vector) {
-            bytes.putInt(Float.floatToIntBits(value));
-        }
-        return sha256(bytes.array());
-    }
-
-    private static UUID stableId(String identity) {
-        byte[] digest = sha256Digest().digest(identity.getBytes(StandardCharsets.UTF_8));
-        ByteBuffer bytes = ByteBuffer.wrap(digest);
-        long most = bytes.getLong();
-        long least = bytes.getLong();
-        most = (most & 0xffffffffffff0fffL) | 0x0000000000005000L;
-        least = (least & 0x3fffffffffffffffL) | 0x8000000000000000L;
-        return new UUID(most, least);
-    }
-
-    private static String sha256(byte[] bytes) {
-        return SHA256_PREFIX + HexFormat.of().formatHex(sha256Digest().digest(bytes));
     }
 
     private static void update(MessageDigest digest, String value) {
