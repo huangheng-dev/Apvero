@@ -43,6 +43,8 @@ class KnowledgeIndexBuildEmbeddingOrchestratorTest {
     private final KnowledgeIndexBuildTransitionKernel kernel =
             mock(KnowledgeIndexBuildTransitionKernel.class);
     private final EmbeddingCapability embeddings = mock(EmbeddingCapability.class);
+    private final KnowledgeIndexBuildTelemetry telemetry =
+            mock(KnowledgeIndexBuildTelemetry.class);
     private final WorkspaceScope scope =
             new WorkspaceScope(UUID.randomUUID(), UUID.randomUUID());
     private final UUID routeId = UUID.randomUUID();
@@ -55,7 +57,7 @@ class KnowledgeIndexBuildEmbeddingOrchestratorTest {
     @BeforeEach
     void setUp() {
         orchestrator = new KnowledgeIndexBuildEmbeddingOrchestrator(
-                batches, coordinator, kernel, embeddings);
+                batches, coordinator, kernel, embeddings, telemetry);
     }
 
     @Test

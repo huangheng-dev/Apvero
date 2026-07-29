@@ -7,6 +7,8 @@ import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexBuildTelemetry.OutcomeTag;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexBuildTelemetry.StaleOperationTag;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
@@ -71,6 +73,7 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
     }
 
     @Autowired KnowledgeIndexBuildTransitionKernel kernel;
+    @Autowired KnowledgeIndexBuildFailureHandler failureHandler;
     @Autowired KnowledgeIndexPersistenceRepository repository;
     @Autowired JdbcTemplate sql;
     @Autowired TransactionTemplate transactions;
@@ -338,6 +341,80 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
                 .isInstanceOf(KnowledgeException.class)
                 .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_LEASE_CONFLICT");
         assertThat(renewed.lockVersion()).isEqualTo(claim.lockVersion() + 1);
+    }
+
+    @Test
+    void operationalAggregatesUseClaimEligibilityAndRemainWorkspaceScoped() {
+        WorkspaceFixture owner = createWorkspace("operations-owner");
+        WorkspaceFixture outsider = createWorkspace("operations-outsider");
+        UUID first = insertBuild(
+                owner, 1, 3, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(5));
+        insertBuild(
+                owner, 1, 3, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(3));
+        insertBuild(
+                outsider, 1, 3, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(10));
+
+        var initial = repository.readBuildOperationalSlice(owner.scope());
+        assertThat(initial.oldestEligibleAgeSeconds()).isGreaterThanOrEqualTo(3);
+        assertThat(initial.reconciliationCount()).isZero();
+
+        BuildRow firstClaim = kernel.claim(owner.scope(), "operations-a", 1).getFirst();
+        BuildRow secondClaim = kernel.claim(owner.scope(), "operations-b", 1).getFirst();
+        assertThat(repository.readBuildOperationalSlice(owner.scope())
+                        .oldestEligibleAgeSeconds())
+                .isNull();
+
+        expireLeaseAtDatabaseBoundary(first);
+        assertThat(repository.readBuildOperationalSlice(owner.scope())
+                        .oldestEligibleAgeSeconds())
+                .isNotNull();
+
+        BuildRow recovered = kernel.claim(owner.scope(), "operations-c", 1).getFirst();
+        BuildRow reconciled = kernel.recordFailure(
+                owner.scope(),
+                recovered,
+                "operations-c",
+                new KnowledgeIndexBuildFailure(
+                        "APVERO_TEST_RECONCILIATION",
+                        KnowledgeIndexBuildFailure.Category.AMBIGUOUS,
+                        false,
+                        true));
+        assertThat(reconciled.reconciliationRequired()).isTrue();
+        assertThat(repository.readBuildOperationalSlice(owner.scope()).reconciliationCount())
+                .isEqualTo(1);
+        assertThat(repository.readBuildOperationalSlice(outsider.scope()).reconciliationCount())
+                .isZero();
+        assertThat(secondClaim.leaseOwner()).isEqualTo("operations-b");
+        assertThat(firstClaim.id()).isEqualTo(first);
+    }
+
+    @Test
+    void staleOwnerCannotPersistRunnerNormalizedFailureAfterRecoveryClaim() {
+        WorkspaceFixture fixture = createWorkspace("normalized-stale");
+        UUID buildId = insertBuild(
+                fixture, 1, 3, OffsetDateTime.now(ZoneOffset.UTC));
+        BuildRow stale = kernel.claim(fixture.scope(), "crashed-runner", 1).getFirst();
+        expireLeaseAtDatabaseBoundary(buildId);
+        BuildRow successor =
+                kernel.claim(fixture.scope(), "recovery-runner", 1).getFirst();
+
+        var result = failureHandler.handle(
+                fixture.scope(),
+                stale,
+                "crashed-runner",
+                false,
+                new IllegalStateException("raw SQL and source content"),
+                StaleOperationTag.FAILURE);
+
+        assertThat(result.outcome()).isEqualTo(OutcomeTag.STALE);
+        assertThat(repository.findBuild(fixture.scope(), buildId))
+                .get()
+                .satisfies(stored -> {
+                    assertThat(stored.lockVersion()).isEqualTo(successor.lockVersion());
+                    assertThat(stored.leaseOwner()).isEqualTo("recovery-runner");
+                    assertThat(stored.errorCode()).isNull();
+                    assertThat(stored.reconciliationRequired()).isFalse();
+                });
     }
 
     @Test

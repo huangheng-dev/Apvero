@@ -105,6 +105,18 @@ final class KnowledgeIndexPersistenceRecords {
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
 
+    record BuildOperationalSlice(
+            Long oldestEligibleAgeSeconds,
+            long reconciliationCount) {
+        BuildOperationalSlice {
+            if ((oldestEligibleAgeSeconds != null && oldestEligibleAgeSeconds < 0)
+                    || reconciliationCount < 0) {
+                throw new IllegalArgumentException(
+                        "APVERO_KNOWLEDGE_INDEX_BUILD_OPERATIONAL_SLICE_INVALID");
+            }
+        }
+    }
+
     record BuildRevisionRow(
             UUID id,
             UUID tenantId,

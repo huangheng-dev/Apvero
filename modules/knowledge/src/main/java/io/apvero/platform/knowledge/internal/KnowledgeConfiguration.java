@@ -63,9 +63,10 @@ class KnowledgeConfiguration {
             KnowledgeEmbeddingBatchExecutor batches,
             KnowledgeEmbeddingLeaseCoordinator coordinator,
             KnowledgeIndexBuildTransitionKernel kernel,
-            EmbeddingCapability embeddings) {
+            EmbeddingCapability embeddings,
+            KnowledgeIndexBuildTelemetry telemetry) {
         return new KnowledgeIndexBuildEmbeddingOrchestrator(
-                batches, coordinator, kernel, embeddings);
+                batches, coordinator, kernel, embeddings, telemetry);
     }
 
     @Bean
@@ -112,9 +113,25 @@ class KnowledgeConfiguration {
             KnowledgeIndexBuildValidationOrchestrator validation,
             KnowledgeIndexPublicationCoordinator publication,
             EmbeddingCapability embeddings,
-            KnowledgeIndexBuildRunnerProperties properties) {
+            KnowledgeIndexBuildRunnerProperties properties,
+            KnowledgeIndexBuildTelemetry telemetry,
+            KnowledgeIndexBuildFailureHandler failures) {
         return new KnowledgeIndexBuildStepDispatcher(
-                kernel, embedding, validation, publication, embeddings, properties);
+                kernel,
+                embedding,
+                validation,
+                publication,
+                embeddings,
+                properties,
+                telemetry,
+                failures);
+    }
+
+    @Bean
+    KnowledgeIndexBuildFailureHandler knowledgeIndexBuildFailureHandler(
+            KnowledgeIndexBuildTransitionKernel kernel,
+            KnowledgeIndexBuildTelemetry telemetry) {
+        return new KnowledgeIndexBuildFailureHandler(kernel, telemetry);
     }
 
     @Bean

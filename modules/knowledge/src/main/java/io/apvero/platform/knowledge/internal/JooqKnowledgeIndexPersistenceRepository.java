@@ -3,6 +3,7 @@ package io.apvero.platform.knowledge.internal;
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildOperationalSlice;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
@@ -28,6 +29,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersistenceRepository {
+    private static final String ELIGIBLE_BUILD_PREDICATE = """
+            (
+                (build.status in ('QUEUED', 'RETRY_WAIT')
+                    and build.attempt_count < build.maximum_attempts
+                    and build.lease_owner is null
+                    and build.lease_until is null
+                    and (build.status = 'QUEUED'
+                        or build.next_attempt_at <= lease_clock.claimed_at))
+                or
+                (build.status in ('EMBEDDING', 'INDEXING', 'VALIDATING')
+                    and (
+                        (build.lease_owner is null and build.lease_until is null)
+                        or build.lease_until <= lease_clock.claimed_at
+                    ))
+            )
+            """;
     private static final String POLICY_SELECT = """
             select id, tenant_id, workspace_id, slug, version,
                 retrieval_algorithm_version, token_estimator_version,
@@ -305,20 +322,7 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                             cross join lease_clock
                             where build.tenant_id = ?
                               and build.workspace_id = ?
-                              and (
-                                  (build.status in ('QUEUED', 'RETRY_WAIT')
-                                      and build.attempt_count < build.maximum_attempts
-                                      and build.lease_owner is null
-                                      and build.lease_until is null
-                                      and (build.status = 'QUEUED'
-                                          or build.next_attempt_at <= lease_clock.claimed_at))
-                                  or
-                                  (build.status in ('EMBEDDING', 'INDEXING', 'VALIDATING')
-                                      and (
-                                          (build.lease_owner is null and build.lease_until is null)
-                                          or build.lease_until <= lease_clock.claimed_at
-                                      ))
-                              )
+                              and %s
                             order by build.next_attempt_at nulls first, build.created_at, build.id
                             for update of build skip locked
                             limit ?
@@ -366,7 +370,7 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                         from candidates
                         where build.id = candidates.id
                         returning build.id
-                        """,
+                        """.formatted(ELIGIBLE_BUILD_PREDICATE),
                         scope.tenantId(),
                         scope.workspaceId(),
                         limit,
@@ -377,6 +381,48 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                 .map(id -> findBuild(scope, id).orElseThrow())
                 .sorted(java.util.Comparator.comparing(BuildRow::createdAt).thenComparing(BuildRow::id))
                 .toList();
+    }
+
+    @Override
+    public BuildOperationalSlice readBuildOperationalSlice(WorkspaceScope scope) {
+        Record record = sql.fetchOne("""
+                with lease_clock as (
+                    select transaction_timestamp() as claimed_at
+                ),
+                aggregate_snapshot as (
+                    select lease_clock.claimed_at,
+                        min(
+                            case
+                                when build.status in ('QUEUED', 'RETRY_WAIT')
+                                    then coalesce(build.next_attempt_at, build.created_at)
+                                else coalesce(build.lease_until, build.created_at)
+                            end
+                        ) filter (where %s) as oldest_eligible_at,
+                        count(build.id) filter (
+                            where build.status = 'FAILED'
+                              and build.reconciliation_required
+                        ) as reconciliation_count
+                    from lease_clock
+                    left join knowledge_index_build build
+                      on build.tenant_id = ?
+                     and build.workspace_id = ?
+                    group by lease_clock.claimed_at
+                )
+                select case
+                        when oldest_eligible_at is null then null
+                        else greatest(
+                            0,
+                            floor(extract(epoch from (claimed_at - oldest_eligible_at)))
+                        )::bigint
+                    end as oldest_eligible_age_seconds,
+                    reconciliation_count
+                from aggregate_snapshot
+                """.formatted(ELIGIBLE_BUILD_PREDICATE),
+                scope.tenantId(),
+                scope.workspaceId());
+        return new BuildOperationalSlice(
+                record.get("oldest_eligible_age_seconds", Long.class),
+                record.get("reconciliation_count", Long.class));
     }
 
     @Override

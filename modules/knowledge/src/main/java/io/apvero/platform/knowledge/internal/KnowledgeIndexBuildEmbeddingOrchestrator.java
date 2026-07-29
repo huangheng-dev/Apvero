@@ -12,6 +12,9 @@ import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.C
 import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.EntryState;
 import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.RecoveryAction;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexBuildTelemetry.EntryKindTag;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexBuildTelemetry.OutcomeTag;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexBuildTelemetry.QualityTag;
 import java.util.Optional;
 
 class KnowledgeIndexBuildEmbeddingOrchestrator {
@@ -19,16 +22,19 @@ class KnowledgeIndexBuildEmbeddingOrchestrator {
     private final KnowledgeEmbeddingLeaseCoordinator coordinator;
     private final KnowledgeIndexBuildTransitionKernel kernel;
     private final EmbeddingCapability embeddings;
+    private final KnowledgeIndexBuildTelemetry telemetry;
 
     KnowledgeIndexBuildEmbeddingOrchestrator(
             KnowledgeEmbeddingBatchExecutor batches,
             KnowledgeEmbeddingLeaseCoordinator coordinator,
             KnowledgeIndexBuildTransitionKernel kernel,
-            EmbeddingCapability embeddings) {
+            EmbeddingCapability embeddings,
+            KnowledgeIndexBuildTelemetry telemetry) {
         this.batches = batches;
         this.coordinator = coordinator;
         this.kernel = kernel;
         this.embeddings = embeddings;
+        this.telemetry = telemetry;
     }
 
     KnowledgeEmbeddingClaimOutcome executeClaim(
@@ -130,6 +136,13 @@ class KnowledgeIndexBuildEmbeddingOrchestrator {
                 result.costMicros(),
                 quality);
         BuildRow progressed = recordProgress(scope, claim, leaseOwner, plan);
+        recordBatch(
+                plan,
+                units,
+                quality == ExecutionUsageQuality.ACTUAL
+                        ? QualityTag.ACTUAL
+                        : QualityTag.ESTIMATED,
+                OutcomeTag.SUCCESS);
         return new KnowledgeEmbeddingClaimOutcome(progressed, action, true);
     }
 
@@ -149,8 +162,13 @@ class KnowledgeIndexBuildEmbeddingOrchestrator {
                 plan.estimatedInputUnits(),
                 plan.quote().estimatedCostMicros(),
                 ExecutionUsageQuality.ESTIMATED);
-        return new KnowledgeEmbeddingClaimOutcome(
-                recordProgress(scope, claim, leaseOwner, plan), action, false);
+        BuildRow progressed = recordProgress(scope, claim, leaseOwner, plan);
+        recordBatch(
+                plan,
+                plan.estimatedInputUnits(),
+                QualityTag.ESTIMATED,
+                OutcomeTag.REPLAYED);
+        return new KnowledgeEmbeddingClaimOutcome(progressed, action, false);
     }
 
     private KnowledgeEmbeddingClaimOutcome complete(
@@ -159,8 +177,13 @@ class KnowledgeIndexBuildEmbeddingOrchestrator {
             String leaseOwner,
             KnowledgeEmbeddingBatchPlan plan,
             RecoveryAction action) {
-        return new KnowledgeEmbeddingClaimOutcome(
-                recordProgress(scope, claim, leaseOwner, plan), action, false);
+        BuildRow progressed = recordProgress(scope, claim, leaseOwner, plan);
+        recordBatch(
+                plan,
+                plan.estimatedInputUnits(),
+                QualityTag.ESTIMATED,
+                OutcomeTag.REPLAYED);
+        return new KnowledgeEmbeddingClaimOutcome(progressed, action, false);
     }
 
     private BuildRow recordProgress(
@@ -171,6 +194,17 @@ class KnowledgeIndexBuildEmbeddingOrchestrator {
         int count = plan.orderedChunks().getLast().entryOrdinal() + 1;
         return kernel.recordEmbeddingProgressAndRelease(
                 scope, claim, leaseOwner, count, count - 1);
+    }
+
+    private void recordBatch(
+            KnowledgeEmbeddingBatchPlan plan,
+            long units,
+            QualityTag quality,
+            OutcomeTag outcome) {
+        int items = plan.orderedChunks().size();
+        telemetry.batchItems(outcome, items);
+        telemetry.batchUnits(quality, outcome, units);
+        telemetry.entries(EntryKindTag.EMBEDDED, outcome, items);
     }
 
     private KnowledgeEmbeddingClaimOutcome fail(
