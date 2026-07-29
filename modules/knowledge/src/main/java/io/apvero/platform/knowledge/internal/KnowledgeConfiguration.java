@@ -101,6 +101,23 @@ class KnowledgeConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({
+        KnowledgeIndexBuildEmbeddingOrchestrator.class,
+        KnowledgeIndexBuildValidationOrchestrator.class,
+        KnowledgeIndexPublicationCoordinator.class
+    })
+    KnowledgeIndexBuildStepDispatcher knowledgeIndexBuildStepDispatcher(
+            KnowledgeIndexBuildTransitionKernel kernel,
+            KnowledgeIndexBuildEmbeddingOrchestrator embedding,
+            KnowledgeIndexBuildValidationOrchestrator validation,
+            KnowledgeIndexPublicationCoordinator publication,
+            EmbeddingCapability embeddings,
+            KnowledgeIndexBuildRunnerProperties properties) {
+        return new KnowledgeIndexBuildStepDispatcher(
+                kernel, embedding, validation, publication, embeddings, properties);
+    }
+
+    @Bean
     KnowledgeIndexPublicationCheckpoint knowledgeIndexPublicationCheckpoint() {
         return stage -> {};
     }

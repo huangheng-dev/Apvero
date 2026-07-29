@@ -43,13 +43,29 @@ class KnowledgeIndexBuildRunnerPropertiesTest {
         assertThatThrownBy(() -> new KnowledgeIndexBuildRunnerProperties(
                         false,
                         4,
+                        4,
                         Duration.ofSeconds(40),
                         Duration.ofSeconds(30),
                         Duration.ofSeconds(10),
+                        Duration.ofSeconds(1),
                         Duration.ofSeconds(2),
-                        Duration.ofMinutes(5)))
+                        Duration.ofMinutes(5),
+                        Duration.ofSeconds(30)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_TIMING_INVALID");
+        assertThatThrownBy(() -> new KnowledgeIndexBuildRunnerProperties(
+                        false,
+                        4,
+                        65,
+                        Duration.ofSeconds(60),
+                        Duration.ofSeconds(30),
+                        Duration.ofSeconds(10),
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofMinutes(5),
+                        Duration.ofSeconds(30)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_CAPACITY_INVALID");
     }
 
     @Test
@@ -58,6 +74,9 @@ class KnowledgeIndexBuildRunnerPropertiesTest {
                 properties(4, Duration.ofSeconds(2), Duration.ofMinutes(5));
 
         assertThat(properties.enabled()).isFalse();
+        assertThat(properties.concurrency()).isEqualTo(4);
+        assertThat(properties.pollInterval()).isEqualTo(Duration.ofSeconds(1));
+        assertThat(properties.gracefulDrain()).isEqualTo(Duration.ofSeconds(30));
         assertThat(properties.leaseDuration())
                 .isGreaterThan(properties.externalCallTimeout().plus(properties.commitMargin()));
     }
@@ -67,10 +86,13 @@ class KnowledgeIndexBuildRunnerPropertiesTest {
         return new KnowledgeIndexBuildRunnerProperties(
                 false,
                 claimBatch,
+                4,
                 Duration.ofSeconds(60),
                 Duration.ofSeconds(30),
                 Duration.ofSeconds(10),
+                Duration.ofSeconds(1),
                 backoffBase,
-                backoffMaximum);
+                backoffMaximum,
+                Duration.ofSeconds(30));
     }
 }
