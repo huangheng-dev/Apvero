@@ -3,6 +3,7 @@ package io.apvero.platform.knowledge.internal;
 import io.apvero.platform.identity.WorkspaceScope;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRevisionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildOperationalSlice;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildSourceCandidateRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
@@ -63,6 +64,8 @@ interface KnowledgeIndexPersistenceRepository {
             String leaseOwner,
             Duration leaseDuration,
             int limit);
+
+    BuildOperationalSlice readBuildOperationalSlice(WorkspaceScope scope);
 
     Optional<BuildRow> renewBuildLease(
             WorkspaceScope scope,

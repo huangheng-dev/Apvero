@@ -1,6 +1,7 @@
 package io.apvero.platform.knowledge.internal;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -9,7 +10,9 @@ import static org.mockito.Mockito.when;
 import io.apvero.platform.capability.EmbeddingCapability;
 import io.apvero.platform.capability.EmbeddingRouteSnapshot;
 import io.apvero.platform.identity.WorkspaceScope;
-import io.apvero.platform.knowledge.KnowledgeException;
+import io.apvero.platform.knowledge.internal.KnowledgeEmbeddingRecoveryDecider.RecoveryAction;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.VersionRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
@@ -27,6 +30,10 @@ class KnowledgeIndexBuildStepDispatcherTest {
     private final KnowledgeIndexPublicationCoordinator publication =
             mock(KnowledgeIndexPublicationCoordinator.class);
     private final EmbeddingCapability embeddings = mock(EmbeddingCapability.class);
+    private final KnowledgeIndexBuildTelemetry telemetry =
+            mock(KnowledgeIndexBuildTelemetry.class);
+    private final KnowledgeIndexBuildFailureHandler failures =
+            mock(KnowledgeIndexBuildFailureHandler.class);
 
     @Test
     void renewsAndDispatchesEachActiveStepExactly() {
@@ -38,18 +45,31 @@ class KnowledgeIndexBuildStepDispatcherTest {
         BuildRow renewedEmbedding = build(scope, BuildStatus.EMBEDDING, BuildStep.EMBEDDING);
         safeRoute(scope, embeddingClaim, 30_000);
         when(kernel.renew(scope, embeddingClaim, owner)).thenReturn(renewedEmbedding);
+        when(embedding.executeClaim(scope, renewedEmbedding, owner))
+                .thenReturn(new KnowledgeEmbeddingClaimOutcome(
+                        renewedEmbedding, RecoveryAction.COMPLETE, false));
         dispatcher.execute(scope, embeddingClaim, owner);
         verify(embedding).executeClaim(scope, renewedEmbedding, owner);
 
         BuildRow indexingClaim = build(scope, BuildStatus.INDEXING, BuildStep.INDEXING);
         BuildRow renewedIndexing = build(scope, BuildStatus.INDEXING, BuildStep.INDEXING);
         when(kernel.renew(scope, indexingClaim, owner)).thenReturn(renewedIndexing);
+        when(validation.executeClaim(scope, renewedIndexing, owner))
+                .thenReturn(new KnowledgeIndexValidationClaimOutcome(
+                        renewedIndexing,
+                        KnowledgeIndexValidationClaimOutcome.Status.ADVANCED_TO_VALIDATING));
         dispatcher.execute(scope, indexingClaim, owner);
         verify(validation).executeClaim(scope, renewedIndexing, owner);
 
         BuildRow validatingClaim = build(scope, BuildStatus.VALIDATING, BuildStep.VALIDATING);
         BuildRow renewedValidating = build(scope, BuildStatus.VALIDATING, BuildStep.VALIDATING);
         when(kernel.renew(scope, validatingClaim, owner)).thenReturn(renewedValidating);
+        when(publication.publish(scope, renewedValidating, owner))
+                .thenReturn(new KnowledgeIndexPublicationOutcome(
+                        renewedValidating,
+                        mock(IndexRow.class),
+                        mock(VersionRow.class),
+                        KnowledgeIndexPublicationOutcome.Status.PUBLISHED));
         dispatcher.execute(scope, validatingClaim, owner);
         verify(publication).publish(scope, renewedValidating, owner);
     }
@@ -61,9 +81,19 @@ class KnowledgeIndexBuildStepDispatcherTest {
         safeRoute(scope, claim, 30_001);
         KnowledgeIndexBuildStepDispatcher dispatcher = dispatcher(Duration.ofSeconds(30));
 
-        assertThatThrownBy(() -> dispatcher.execute(scope, claim, "runner"))
-                .isInstanceOf(KnowledgeException.class)
-                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_ROUTE_TIMEOUT_UNSAFE");
+        when(failures.handle(
+                        any(),
+                        any(),
+                        any(),
+                        anyBoolean(),
+                        any(),
+                        any()))
+                .thenReturn(new KnowledgeIndexBuildFailureHandler.HandlingResult(
+                        claim,
+                        KnowledgeIndexBuildTelemetry.OutcomeTag.FAILED,
+                        KnowledgeIndexBuildTelemetry.ErrorCategoryTag.PERMANENT));
+
+        dispatcher.execute(scope, claim, "runner");
 
         verifyNoInteractions(kernel, embedding, validation, publication);
     }
@@ -74,9 +104,19 @@ class KnowledgeIndexBuildStepDispatcherTest {
         BuildRow mismatch = build(scope, BuildStatus.INDEXING, BuildStep.EMBEDDING);
         KnowledgeIndexBuildStepDispatcher dispatcher = dispatcher(Duration.ofSeconds(30));
 
-        assertThatThrownBy(() -> dispatcher.execute(scope, mismatch, "runner"))
-                .isInstanceOf(KnowledgeException.class)
-                .hasMessage("APVERO_KNOWLEDGE_INDEX_BUILD_STATE_CONFLICT");
+        when(failures.handle(
+                        any(),
+                        any(),
+                        any(),
+                        anyBoolean(),
+                        any(),
+                        any()))
+                .thenReturn(new KnowledgeIndexBuildFailureHandler.HandlingResult(
+                        mismatch,
+                        KnowledgeIndexBuildTelemetry.OutcomeTag.STALE,
+                        KnowledgeIndexBuildTelemetry.ErrorCategoryTag.CONFLICT));
+
+        dispatcher.execute(scope, mismatch, "runner");
 
         verifyNoInteractions(kernel, embedding, validation, publication, embeddings);
     }
@@ -88,7 +128,9 @@ class KnowledgeIndexBuildStepDispatcherTest {
                 validation,
                 publication,
                 embeddings,
-                properties(true, 4, externalTimeout, Duration.ofSeconds(30)));
+                properties(true, 4, externalTimeout, Duration.ofSeconds(30)),
+                telemetry,
+                failures);
     }
 
     private void safeRoute(WorkspaceScope scope, BuildRow claim, int timeoutMs) {

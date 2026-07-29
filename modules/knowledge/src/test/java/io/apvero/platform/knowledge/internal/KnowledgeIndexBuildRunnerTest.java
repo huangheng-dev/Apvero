@@ -124,6 +124,42 @@ class KnowledgeIndexBuildRunnerTest {
     }
 
     @Test
+    void failedOperationalScanPublishesFailureAndDoesNotClaim() {
+        Fixture fixture = fixture(true, true, 1, Duration.ofSeconds(1));
+        WorkspaceScope scope = scope("00000000-0000-0000-0000-000000000001");
+        when(fixture.workspaces.listForBackgroundProcessing()).thenReturn(List.of(scope));
+        org.mockito.Mockito.doThrow(new IllegalStateException("database details"))
+                .when(fixture.operations)
+                .scan(List.of(scope));
+        try {
+            fixture.runner.poll();
+            verify(fixture.operations).failed();
+            verifyNoInteractions(fixture.kernel);
+        } finally {
+            fixture.runner.stop();
+        }
+    }
+
+    @Test
+    void failedClaimInvalidatesTheCompleteSnapshotWithoutLeakingTheFailure() {
+        Fixture fixture = fixture(true, true, 1, Duration.ofSeconds(1));
+        WorkspaceScope scope = scope("00000000-0000-0000-0000-000000000001");
+        when(fixture.workspaces.listForBackgroundProcessing()).thenReturn(List.of(scope));
+        when(fixture.kernel.claim(scope, fixture.owner(), 1))
+                .thenThrow(new IllegalStateException("tenant and SQL detail"));
+        try {
+            fixture.runner.poll();
+            verify(fixture.operations).scan(List.of(scope));
+            verify(fixture.operations).failed();
+            verify(fixture.operations, never()).succeeded(
+                    org.mockito.ArgumentMatchers.any());
+            verifyNoInteractions(fixture.dispatcher);
+        } finally {
+            fixture.runner.stop();
+        }
+    }
+
+    @Test
     void boundedCapacityPreventsAdditionalClaimsUntilWorkCompletes() throws Exception {
         Fixture fixture = fixture(true, true, 2, Duration.ofSeconds(1));
         WorkspaceScope scope = scope("00000000-0000-0000-0000-000000000001");
@@ -275,6 +311,10 @@ class KnowledgeIndexBuildRunnerTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<KnowledgeIndexBuildStepDispatcher> provider =
                 mock(ObjectProvider.class);
+        KnowledgeIndexBuildOperations operations =
+                mock(KnowledgeIndexBuildOperations.class);
+        KnowledgeIndexBuildTelemetry telemetry =
+                mock(KnowledgeIndexBuildTelemetry.class);
         when(availability.isEnabled()).thenReturn(knowledgeEnabled);
         when(provider.getIfAvailable()).thenReturn(dispatcher);
         KnowledgeIndexBuildRunner runner = new KnowledgeIndexBuildRunner(
@@ -286,9 +326,11 @@ class KnowledgeIndexBuildRunnerTest {
                         runnerEnabled,
                         concurrency,
                         Duration.ofSeconds(30),
-                        gracefulDrain));
+                        gracefulDrain),
+                operations,
+                telemetry);
         return new Fixture(
-                runner, workspaces, kernel, dispatcher, provider);
+                runner, workspaces, kernel, dispatcher, provider, operations, telemetry);
     }
 
     private static BuildRow build(BuildStatus status, BuildStep step) {
@@ -322,7 +364,9 @@ class KnowledgeIndexBuildRunnerTest {
             WorkspaceScopeCatalog workspaces,
             KnowledgeIndexBuildTransitionKernel kernel,
             KnowledgeIndexBuildStepDispatcher dispatcher,
-            ObjectProvider<KnowledgeIndexBuildStepDispatcher> dispatcherProvider) {
+            ObjectProvider<KnowledgeIndexBuildStepDispatcher> dispatcherProvider,
+            KnowledgeIndexBuildOperations operations,
+            KnowledgeIndexBuildTelemetry telemetry) {
         String owner() {
             return runner.leaseOwner();
         }
