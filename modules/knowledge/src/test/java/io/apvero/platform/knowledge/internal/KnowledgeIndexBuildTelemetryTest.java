@@ -58,6 +58,24 @@ class KnowledgeIndexBuildTelemetryTest {
             Map.entry("apvero.knowledge.index.build.reconciliation", Set.of()));
 
     @Test
+    void repeatedBuildScaleDoesNotIncreaseMetricCardinality() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        KnowledgeIndexBuildTelemetry telemetry = new KnowledgeIndexBuildTelemetry(meters);
+        telemetry.claimed(BuildStep.EMBEDDING);
+        telemetry.queueWait(BuildStep.EMBEDDING, 1);
+        telemetry.attempt(BuildStep.EMBEDDING, 1);
+        int baseline = meters.getMeters().size();
+
+        for (int build = 0; build < 100; build++) {
+            telemetry.claimed(BuildStep.EMBEDDING);
+            telemetry.queueWait(BuildStep.EMBEDDING, build + 1L);
+            telemetry.attempt(BuildStep.EMBEDDING, 1);
+        }
+
+        assertThat(meters.getMeters()).hasSize(baseline);
+    }
+
+    @Test
     void registersEveryRequiredFamilyWithOnlyBoundedTagsAndNoIdentity() {
         SimpleMeterRegistry meters = new SimpleMeterRegistry();
         KnowledgeIndexBuildTelemetry telemetry = new KnowledgeIndexBuildTelemetry(meters);

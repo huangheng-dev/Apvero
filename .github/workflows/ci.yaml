@@ -135,6 +135,16 @@ jobs:
       APVERO_KNOWLEDGE_RUNNER_BACKOFF_BASE: 30s
       APVERO_KNOWLEDGE_RUNNER_BACKOFF_MAXIMUM: 30s
       APVERO_KNOWLEDGE_RUNNER_GRACEFUL_DRAIN: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED: "false"
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_CLAIM_BATCH: 1
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_CONCURRENCY: 1
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_LEASE_DURATION: 6s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_EXTERNAL_CALL_TIMEOUT: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_COMMIT_MARGIN: 1s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_POLL_INTERVAL: 200ms
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_BACKOFF_BASE: 200ms
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_BACKOFF_MAXIMUM: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_GRACEFUL_DRAIN: 2s
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
@@ -166,6 +176,27 @@ jobs:
           "${compose[@]}" start ai-worker
           "${compose[@]}" up -d --wait --wait-timeout 120 postgres ai-worker platform-server
           uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py wait-job "$job_id" READY
+      - name: Verify disabled, automatic Build and crash recovery paths
+        shell: bash
+        run: |
+          compose=(docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml)
+          verify=(uv run --project apps/ai-worker python deploy/compose/verify_index_build.py)
+
+          "${verify[@]}" bootstrap-disabled
+          APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=true \
+            "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" verify-ready
+
+          "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" create-recovery
+          "${compose[@]}" stop platform-server
+          "${verify[@]}" mark-recovery-inflight
+          APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=true \
+            "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" verify-recovery
       - name: Capture service state and logs
         if: always()
         run: |
