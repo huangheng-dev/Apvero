@@ -1,6 +1,6 @@
 # P2.2 不可变索引与检索实验室验收候选
 
-状态：干净环境候选 CI 已于 2026-07-31 通过，等待维护者验收。
+状态：维护者已于 2026-07-31 验收；本文件保留为候选证据记录。
 
 P2.2 与 P2.2f 均保持 `in-progress`。Knowledge 仍默认禁用，Knowledge 产品页面仍未上线。
 只有维护者批准且候选分支的干净环境 CI 全绿后，才能把这两个状态改为 `completed`。
@@ -94,11 +94,8 @@ Draft [PR #37](https://github.com/huangheng-dev/Apvero/pull/37) 只包含一个�
 3. 包括依赖审计与 `knowledge-compose` 在内的全部干净环境 CI 任务已通过。
 4. 候选 PR、头 Commit、Tree 与 CI 标识已记录在上文。
 
-待完成：
-
-1. 维护者明确验收 P2.2。
-2. 只有批准后，才把 P2.2f 与 P2.2 标为 `completed`，建立最终验收记录，将 PR #37
-   转为 Ready 并合并。
+维护者已于 2026-07-31 验收 P2.2。最终证据映射和验收后状态记录在
+[`p2-2-acceptance.md`](p2-2-acceptance.md)。
 
 ## 回滚
 

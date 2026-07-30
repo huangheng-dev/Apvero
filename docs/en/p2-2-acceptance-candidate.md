@@ -1,6 +1,6 @@
 # P2.2 Immutable Index and Retrieval Lab Acceptance Candidate
 
-Status: clean-host candidate CI passed on 2026-07-31; awaiting maintainer acceptance.
+Status: accepted by the maintainer on 2026-07-31; retained as the candidate evidence record.
 
 P2.2 and P2.2f remain `in-progress`. Knowledge remains disabled by default and the Knowledge
 product surface remains non-live. Maintainer approval and a green clean-host candidate CI run are
@@ -102,11 +102,8 @@ Completed:
 3. Every clean-host CI job, including dependency audit and `knowledge-compose`, passed.
 4. Candidate PR, head Commit, Tree and CI identities are recorded above.
 
-Remaining:
-
-1. The maintainer explicitly accepts P2.2.
-2. Only after approval, mark P2.2f and P2.2 `completed`, create the final acceptance record, turn
-   PR #37 Ready and merge it.
+The maintainer accepted P2.2 on 2026-07-31. The final evidence map and post-acceptance state are
+recorded in [`p2-2-acceptance.md`](p2-2-acceptance.md).
 
 ## Rollback
 
