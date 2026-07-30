@@ -160,7 +160,29 @@ stages:
           - docs/zh-CN/p2-2-acceptance.md
       - id: P2.3
         name: Application to cited Run closure
-        status: planned
+        status: in-progress
+        slices:
+          - id: P2.3a
+            name: Contract reconciliation and opaque Application bindings
+            status: planned
+          - id: P2.3b
+            name: Immutable Manifest 1.1 release pinning
+            status: planned
+          - id: P2.3c
+            name: Scoped Run retrieval evidence ledger
+            status: planned
+          - id: P2.3d
+            name: Grounded runtime orchestration
+            status: planned
+          - id: P2.3e
+            name: Structured answer and citation validation
+            status: planned
+          - id: P2.3f
+            name: Closure and compatibility hardening
+            status: planned
+        planningEvidence:
+          - docs/en/p2-3-implementation-plan.md
+          - docs/zh-CN/p2-3-implementation-plan.md
       - id: P2.4
         name: Product and operations gate
         status: planned
