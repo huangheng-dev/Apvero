@@ -1,7 +1,7 @@
 schemaVersion: 1
 project: Apvero
 currentStage: P2
-lastReviewed: 2026-07-30
+lastReviewed: 2026-07-31
 
 statusValues: [completed, in-progress, planned]
 
@@ -108,7 +108,7 @@ stages:
           - docs/zh-CN/p2-1-acceptance.md
       - id: P2.2
         name: Immutable index and Retrieval Lab
-        status: in-progress
+        status: completed
         slices:
           - id: P2.2a
             name: Protected correction and capability/governance shell
@@ -127,10 +127,18 @@ stages:
               - docs/zh-CN/p2-2d-5-verification.md
           - id: P2.2e
             name: Exact Retrieval Lab
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-2e-5-verification.md
+              - docs/zh-CN/p2-2e-5-verification.md
           - id: P2.2f
             name: Acceptance hardening
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-2f-performance-envelope.md
+              - docs/zh-CN/p2-2f-performance-envelope.md
+              - docs/en/p2-2-acceptance-candidate.md
+              - docs/zh-CN/p2-2-acceptance-candidate.md
         planningEvidence:
           - docs/en/p2-2-implementation-plan.md
           - docs/zh-CN/p2-2-implementation-plan.md
@@ -138,6 +146,8 @@ stages:
           - docs/zh-CN/p2-2c-embedding-execution-baseline.md
           - docs/en/p2-2d-durable-build-publication-baseline.md
           - docs/zh-CN/p2-2d-durable-build-publication-baseline.md
+          - docs/en/p2-2e-exact-retrieval-lab-baseline.md
+          - docs/zh-CN/p2-2e-exact-retrieval-lab-baseline.md
         sliceEvidence:
           - docs/en/p2-2a-verification.md
           - docs/zh-CN/p2-2a-verification.md
@@ -145,6 +155,9 @@ stages:
           - docs/zh-CN/p2-2b-verification.md
           - docs/en/p2-2c-verification.md
           - docs/zh-CN/p2-2c-verification.md
+        verificationEvidence:
+          - docs/en/p2-2-acceptance.md
+          - docs/zh-CN/p2-2-acceptance.md
       - id: P2.3
         name: Application to cited Run closure
         status: planned

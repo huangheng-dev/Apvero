@@ -8,6 +8,7 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Bu
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.ExactRetrievalCandidate;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.RetrievalPolicyRow;
@@ -91,6 +92,64 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                 vector_dimension, source_count, chunk_count, artifact_digest, status, published_at
             from knowledge_index_version
             """;
+    static final String EXACT_RETRIEVAL_SQL = """
+            with query_input as (
+                select ?::vector as embedding
+            ),
+            ranked as (
+                select entry.source_id, entry.source_revision_id, entry.document_id,
+                    entry.chunk_id, chunk.content_digest, chunk.text as content,
+                    source.name as source_title, source.source_type,
+                    chunk.start_offset, chunk.end_offset, chunk.page_number,
+                    chunk.heading, chunk.paragraph_number, chunk.line_start, chunk.line_end,
+                    entry.embedding <=> query_input.embedding as cosine_distance
+                from query_input
+                join knowledge_index_version version on true
+                join knowledge_index_build build
+                  on build.id = version.knowledge_index_build_id
+                 and build.tenant_id = version.tenant_id
+                 and build.workspace_id = version.workspace_id
+                 and build.knowledge_index_id = version.knowledge_index_id
+                 and build.status = 'READY'
+                join knowledge_index_entry entry
+                  on entry.knowledge_index_build_id = build.id
+                 and entry.tenant_id = build.tenant_id
+                 and entry.workspace_id = build.workspace_id
+                 and entry.knowledge_index_id = build.knowledge_index_id
+                 and entry.knowledge_base_id = build.knowledge_base_id
+                 and entry.vector_dimension = version.vector_dimension
+                join knowledge_chunk chunk
+                  on chunk.id = entry.chunk_id
+                 and chunk.tenant_id = entry.tenant_id
+                 and chunk.workspace_id = entry.workspace_id
+                 and chunk.document_id = entry.document_id
+                 and chunk.source_revision_id = entry.source_revision_id
+                join knowledge_source source
+                  on source.id = entry.source_id
+                 and source.tenant_id = entry.tenant_id
+                 and source.workspace_id = entry.workspace_id
+                 and source.knowledge_base_id = entry.knowledge_base_id
+                where version.tenant_id = ?
+                  and version.workspace_id = ?
+                  and version.id = ?
+                  and version.status = 'READY'
+                  and vector_dims(query_input.embedding) = version.vector_dimension
+                  and (entry.embedding <=> query_input.embedding)
+                      <= (1.0 - ?::double precision)
+                order by cosine_distance asc, entry.chunk_id asc
+                limit ?
+            )
+            select row_number() over (
+                       order by cosine_distance asc, chunk_id asc)::integer as rank,
+                   greatest(0.0::double precision,
+                       least(1.0::double precision, 1.0 - cosine_distance)) as score,
+                   source_id, source_revision_id, document_id, chunk_id,
+                   content_digest, content, source_title, source_type,
+                   start_offset, end_offset, page_number, heading,
+                   paragraph_number, line_start, line_end
+            from ranked
+            order by cosine_distance asc, chunk_id asc
+            """;
 
     private final DSLContext sql;
 
@@ -101,20 +160,14 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     @Override
     public RetrievalPolicyRow insertPolicy(WorkspaceScope scope, RetrievalPolicyRow row) {
         requireScope(scope, row.tenantId(), row.workspaceId());
-        sql.execute("""
-                insert into retrieval_policy_version(
-                    id, tenant_id, workspace_id, slug, version,
-                    retrieval_algorithm_version, token_estimator_version,
-                    retention_policy_version_at_publish, top_k, maximum_context_input_units,
-                    minimum_score, overlap_behavior, no_evidence_behavior, policy_digest,
-                    created_by, created_at)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, row.id(), row.tenantId(), row.workspaceId(), row.slug(), row.version(),
-                row.retrievalAlgorithmVersion(), row.tokenEstimatorVersion(),
-                row.retentionPolicyVersionAtPublish(), row.topK(), row.maximumContextInputUnits(),
-                row.minimumScore(), row.overlapBehavior(), row.noEvidenceBehavior(),
-                row.policyDigest(), row.createdBy(), timestamp(row.createdAt()));
+        sql.execute(policyInsert(""), policyArguments(row));
         return findPolicy(scope, row.id()).orElseThrow();
+    }
+
+    @Override
+    public boolean insertPolicyIfAbsent(WorkspaceScope scope, RetrievalPolicyRow row) {
+        requireScope(scope, row.tenantId(), row.workspaceId());
+        return sql.execute(policyInsert(" on conflict do nothing"), policyArguments(row)) == 1;
     }
 
     @Override
@@ -122,6 +175,33 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
         return sql.fetchOptional(POLICY_SELECT
                         + " where tenant_id = ? and workspace_id = ? and id = ?",
                         scope.tenantId(), scope.workspaceId(), policyId)
+                .map(this::mapPolicy);
+    }
+
+    @Override
+    public Optional<RetrievalPolicyRow> findPolicyBySlugAndVersion(
+            WorkspaceScope scope, String slug, String version) {
+        return sql.fetchOptional(POLICY_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and slug = ? and version = ?",
+                        scope.tenantId(), scope.workspaceId(), slug, version)
+                .map(this::mapPolicy);
+    }
+
+    @Override
+    public Optional<RetrievalPolicyRow> findPolicyByDigest(
+            WorkspaceScope scope, String policyDigest) {
+        return sql.fetchOptional(POLICY_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and policy_digest = ?",
+                        scope.tenantId(), scope.workspaceId(), policyDigest)
+                .map(this::mapPolicy);
+    }
+
+    @Override
+    public List<RetrievalPolicyRow> listPolicies(WorkspaceScope scope) {
+        return sql.fetch(POLICY_SELECT
+                        + " where tenant_id = ? and workspace_id = ?"
+                        + " order by created_at desc, id asc",
+                        scope.tenantId(), scope.workspaceId())
                 .map(this::mapPolicy);
     }
 
@@ -346,7 +426,8 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                                 else build.next_attempt_at
                             end,
                             lease_owner = ?,
-                            lease_until = transaction_timestamp()
+                            lease_until = greatest(
+                                    transaction_timestamp(), build.created_at)
                                 + (?::bigint * interval '1 millisecond'),
                             error_code = case
                                 when build.status in ('QUEUED', 'RETRY_WAIT') then null
@@ -364,9 +445,12 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                                 when build.status in ('QUEUED', 'RETRY_WAIT') then '{}'::jsonb
                                 else build.failure_metadata
                             end,
-                            started_at = coalesce(build.started_at, transaction_timestamp()),
+                            started_at = coalesce(
+                                    build.started_at,
+                                    greatest(transaction_timestamp(), build.created_at)),
                             lock_version = build.lock_version + 1,
-                            updated_at = transaction_timestamp()
+                            updated_at = greatest(
+                                    transaction_timestamp(), build.created_at)
                         from candidates
                         where build.id = candidates.id
                         returning build.id
@@ -812,6 +896,29 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public List<ExactRetrievalCandidate> rankExact(
+            WorkspaceScope scope,
+            UUID versionId,
+            List<Float> queryEmbedding,
+            int expectedVectorDimension,
+            double minimumScore,
+            int topK) {
+        if (queryEmbedding == null || queryEmbedding.size() != expectedVectorDimension) {
+            throw new IllegalArgumentException(
+                    "APVERO_KNOWLEDGE_RETRIEVAL_VECTOR_DIMENSION_MISMATCH");
+        }
+        return sql.fetch(
+                        EXACT_RETRIEVAL_SQL,
+                        vector(queryEmbedding),
+                        scope.tenantId(),
+                        scope.workspaceId(),
+                        versionId,
+                        minimumScore,
+                        topK)
+                .map(this::mapExactRetrievalCandidate);
+    }
+
+    @Override
     public Optional<BuildRow> persistPublicationArtifact(
             WorkspaceScope scope,
             UUID buildId,
@@ -914,6 +1021,28 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                 string(record, "created_by"), time(record, "created_at"));
     }
 
+    private static String policyInsert(String conflictClause) {
+        return """
+                insert into retrieval_policy_version(
+                    id, tenant_id, workspace_id, slug, version,
+                    retrieval_algorithm_version, token_estimator_version,
+                    retention_policy_version_at_publish, top_k, maximum_context_input_units,
+                    minimum_score, overlap_behavior, no_evidence_behavior, policy_digest,
+                    created_by, created_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """ + conflictClause;
+    }
+
+    private static Object[] policyArguments(RetrievalPolicyRow row) {
+        return new Object[] {
+            row.id(), row.tenantId(), row.workspaceId(), row.slug(), row.version(),
+            row.retrievalAlgorithmVersion(), row.tokenEstimatorVersion(),
+            row.retentionPolicyVersionAtPublish(), row.topK(), row.maximumContextInputUnits(),
+            row.minimumScore(), row.overlapBehavior(), row.noEvidenceBehavior(),
+            row.policyDigest(), row.createdBy(), timestamp(row.createdAt())
+        };
+    }
+
     private IndexRow mapIndex(Record record) {
         return new IndexRow(
                 uuid(record, "id"), uuid(record, "tenant_id"), uuid(record, "workspace_id"),
@@ -985,6 +1114,28 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
                 integer(record, "vector_dimension"), integer(record, "source_count"),
                 integer(record, "chunk_count"), string(record, "artifact_digest"),
                 string(record, "status"), time(record, "published_at"));
+    }
+
+    private ExactRetrievalCandidate mapExactRetrievalCandidate(Record record) {
+        Double score = record.get("score", Double.class);
+        return new ExactRetrievalCandidate(
+                integer(record, "rank"),
+                BigDecimal.valueOf(score),
+                uuid(record, "source_id"),
+                uuid(record, "source_revision_id"),
+                uuid(record, "document_id"),
+                uuid(record, "chunk_id"),
+                string(record, "content_digest"),
+                string(record, "content"),
+                string(record, "source_title"),
+                string(record, "source_type"),
+                integer(record, "start_offset"),
+                integer(record, "end_offset"),
+                integer(record, "page_number"),
+                string(record, "heading"),
+                integer(record, "paragraph_number"),
+                integer(record, "line_start"),
+                integer(record, "line_end"));
     }
 
     private static void requireScope(WorkspaceScope scope, UUID tenantId, UUID workspaceId) {

@@ -82,8 +82,10 @@ Never silently resolve a conflict against a higher-authority source.
 2. Planning and documentation use `docs/`; business implementation uses `feature/`. Tool, model, agent, contributor, or vendor names are not branch prefixes.
 3. Keep approved planning and implementation on separate branches and pull requests.
 4. Create commits at coherent, verified checkpoints; do not commit every file save or incomplete experiment.
-5. Remote GitHub writes use the GitHub API by default and verify Blob, Tree, Commit, and Ref identities. Git Smart HTTP is a fallback transport.
-6. Branch names are lowercase kebab-case after the namespace, for example `feature/p2-1a-module-safety-shell`.
+5. Implementation checkpoints and slices remain local commits on one milestone feature branch by default. Do not create a remote branch or pull request for each lettered or numbered substage.
+6. Publish implementation to GitHub and open one implementation pull request only after the complete milestone, such as `P2.2`, has an assembled verification candidate. Earlier publication requires an explicit maintainer instruction.
+7. Remote GitHub writes use the GitHub API by default and verify Blob, Tree, Commit, and Ref identities. Git Smart HTTP is a fallback transport.
+8. Branch names are lowercase kebab-case after the namespace, for example `feature/p2-2-immutable-index-retrieval-lab`.
 
 ## Security rules
 

@@ -8,6 +8,7 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Bu
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.EntryRow;
+import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.ExactRetrievalCandidate;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.IndexRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.RetrievalPolicyRow;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.VersionRow;
@@ -20,7 +21,16 @@ import java.util.UUID;
 interface KnowledgeIndexPersistenceRepository {
     RetrievalPolicyRow insertPolicy(WorkspaceScope scope, RetrievalPolicyRow row);
 
+    boolean insertPolicyIfAbsent(WorkspaceScope scope, RetrievalPolicyRow row);
+
     Optional<RetrievalPolicyRow> findPolicy(WorkspaceScope scope, UUID policyId);
+
+    Optional<RetrievalPolicyRow> findPolicyBySlugAndVersion(
+            WorkspaceScope scope, String slug, String version);
+
+    Optional<RetrievalPolicyRow> findPolicyByDigest(WorkspaceScope scope, String policyDigest);
+
+    List<RetrievalPolicyRow> listPolicies(WorkspaceScope scope);
 
     IndexRow insertIndex(WorkspaceScope scope, IndexRow row);
 
@@ -132,6 +142,14 @@ interface KnowledgeIndexPersistenceRepository {
     Optional<VersionRow> findVersion(WorkspaceScope scope, UUID versionId);
 
     List<VersionRow> listVersions(WorkspaceScope scope, UUID indexId);
+
+    List<ExactRetrievalCandidate> rankExact(
+            WorkspaceScope scope,
+            UUID versionId,
+            List<Float> queryEmbedding,
+            int expectedVectorDimension,
+            double minimumScore,
+            int topK);
 
     Optional<BuildRow> persistPublicationArtifact(
             WorkspaceScope scope,

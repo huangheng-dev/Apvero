@@ -38,8 +38,8 @@ import org.testcontainers.utility.DockerImageName;
         "apvero.knowledge.index-build-runner.lease-duration=2s",
         "apvero.knowledge.index-build-runner.external-call-timeout=1s",
         "apvero.knowledge.index-build-runner.commit-margin=500ms",
-        "apvero.knowledge.index-build-runner.backoff-base=10ms",
-        "apvero.knowledge.index-build-runner.backoff-maximum=20ms"
+        "apvero.knowledge.index-build-runner.backoff-base=2s",
+        "apvero.knowledge.index-build-runner.backoff-maximum=2s"
 })
 class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
@@ -98,6 +98,21 @@ class P22d2KnowledgeIndexBuildLeaseIntegrationTest {
         assertThat(kernel.claim(outsider.scope(), "worker-d", 4))
                 .extracting(BuildRow::id)
                 .containsExactly(hidden);
+    }
+
+    @Test
+    void claimClampsDatabaseTimeToAClientCreatedAtThatIsSlightlyAhead() {
+        WorkspaceFixture fixture = createWorkspace("clock-skew");
+        OffsetDateTime clientCreatedAt =
+                OffsetDateTime.now(ZoneOffset.UTC).plusSeconds(1);
+        UUID buildId = insertBuild(fixture, 1, 3, clientCreatedAt);
+
+        BuildRow claimed = kernel.claim(fixture.scope(), "clock-skew-owner", 1).getFirst();
+
+        assertThat(claimed.id()).isEqualTo(buildId);
+        assertThat(claimed.startedAt()).isAfterOrEqualTo(claimed.createdAt());
+        assertThat(claimed.updatedAt()).isAfterOrEqualTo(claimed.createdAt());
+        assertThat(claimed.leaseUntil()).isAfter(claimed.startedAt());
     }
 
     @Test
