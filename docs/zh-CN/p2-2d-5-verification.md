@@ -1,11 +1,14 @@
 # P2.2d-5 运维与最终验证
 
-状态：实现检查点候选；仍需维护者验收
+状态：已于 2026-07-30 验收；P2.2 仍在进行中
 
 ## 身份与证据边界
 
 - 源基线：`ba488407c0a01406a204cd8b1d067ac399867fb0`
 - 已验证实现提交：`485dd4926d557e4dd0f26251bf8dd7f09486a85a`
+- 已验收候选提交：`5b1a5eaa1e4142ce76657b446884dd10ef975d1a`
+- 已验收 GitHub CI 运行：
+  `https://github.com/huangheng-dev/Apvero/actions/runs/30529019920`
 - 本地平台镜像：
   `sha256:c7f2614961989aa88ab29a618f72aa92611bb3df6451fde9df3606e68444f41f`
 - 本地 AI worker 镜像：
@@ -199,9 +202,11 @@ Debian 将这三个 Trixie 发现项均归类为 `no-dsa` 的轻微问题。本�
 - Windows Docker 资源竞争导致单次全平台调用无法保持全绿；分区重跑已关闭全部失败测试，
   但 GitHub CI 仍必须证明一次全新的 Linux 累计运行。
 
-## 阶段状态建议
+## 验收记录
 
-记录候选提交、完成镜像扫描发现项处置且全部 GitHub checks 通过后，维护者可以验收
-P2.2d-5，并将 P2.2d 标记为完成。
-本文档不会修改 `architecture/delivery-stages.yaml`；在明确验收前，P2.2d 仍为进行中。
-验收前仍禁止开始 P2.2e。
+维护者于 2026-07-30 在候选身份、明确的基础镜像安全处置和全部七个 GitHub CI 作业通过后，
+验收 P2.2d-5 与 P2.2d。`architecture/delivery-stages.yaml` 已将 P2.2d 记录为
+`completed`。
+
+本次验收不会完成 P2.2 或 P2。下一顺序切片是 P2.2e Exact Retrieval Lab，P2.2f
+Acceptance Hardening 仍为计划状态。Knowledge 保持默认关闭，且不授权任何 P2.3 行为。

@@ -1,11 +1,14 @@
 # P2.2d-5 Operations and Final Verification
 
-Status: implementation checkpoint candidate; maintainer acceptance required
+Status: accepted on 2026-07-30; P2.2 remains in progress
 
 ## Identity and evidence boundary
 
 - Source baseline: `ba488407c0a01406a204cd8b1d067ac399867fb0`
 - Verified implementation commit: `485dd4926d557e4dd0f26251bf8dd7f09486a85a`
+- Accepted candidate commit: `5b1a5eaa1e4142ce76657b446884dd10ef975d1a`
+- Accepted GitHub CI run:
+  `https://github.com/huangheng-dev/Apvero/actions/runs/30529019920`
 - Local platform image:
   `sha256:c7f2614961989aa88ab29a618f72aa92611bb3df6451fde9df3606e68444f41f`
 - Local AI worker image:
@@ -214,9 +217,12 @@ then be reverted without a data rollback because this slice adds no migration.
   green; the partitioned rerun closed every failed test, but GitHub CI must still prove one clean
   Linux cumulative run.
 
-## Stage-status proposal
+## Acceptance record
 
-After the candidate commit is recorded, the image-scan findings are dispositioned, and all GitHub
-checks pass, the maintainer may accept P2.2d-5 and P2.2d as complete. This document does not change
-`architecture/delivery-stages.yaml`; P2.2d remains in progress until that explicit acceptance.
-Starting P2.2e before acceptance remains prohibited.
+The maintainer accepted P2.2d-5 and P2.2d on 2026-07-30 after the candidate identity, explicit
+base-image security disposition and all seven GitHub CI jobs passed. P2.2d is recorded as
+`completed` in `architecture/delivery-stages.yaml`.
+
+This acceptance does not complete P2.2 or P2. P2.2e Exact Retrieval Lab is the next sequential
+slice; P2.2f acceptance hardening remains planned. Knowledge stays disabled by default and no
+P2.3 behavior is authorized.

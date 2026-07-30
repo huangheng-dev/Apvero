@@ -1,7 +1,7 @@
 schemaVersion: 1
 project: Apvero
 currentStage: P2
-lastReviewed: 2026-07-25
+lastReviewed: 2026-07-30
 
 statusValues: [completed, in-progress, planned]
 
@@ -109,6 +109,28 @@ stages:
       - id: P2.2
         name: Immutable index and Retrieval Lab
         status: in-progress
+        slices:
+          - id: P2.2a
+            name: Protected correction and capability/governance shell
+            status: completed
+          - id: P2.2b
+            name: Scoped immutable persistence
+            status: completed
+          - id: P2.2c
+            name: Governed Embedding execution
+            status: completed
+          - id: P2.2d
+            name: Durable Build and atomic publication
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-2d-5-verification.md
+              - docs/zh-CN/p2-2d-5-verification.md
+          - id: P2.2e
+            name: Exact Retrieval Lab
+            status: planned
+          - id: P2.2f
+            name: Acceptance hardening
+            status: planned
         planningEvidence:
           - docs/en/p2-2-implementation-plan.md
           - docs/zh-CN/p2-2-implementation-plan.md
