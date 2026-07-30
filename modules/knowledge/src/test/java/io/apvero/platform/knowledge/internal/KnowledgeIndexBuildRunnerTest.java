@@ -18,17 +18,87 @@ import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.Bu
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStatus;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.BuildStep;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
 
 class KnowledgeIndexBuildRunnerTest {
+    @ParameterizedTest(name = "drains 100 builds across 20 workspaces at concurrency {0}")
+    @ValueSource(ints = {1, 4, 8})
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void drainsTheReferenceSchedulerEnvelopeFairly(int concurrency) throws Exception {
+        Fixture fixture = fixture(true, true, concurrency, Duration.ofSeconds(1));
+        List<WorkspaceScope> scopes = IntStream.rangeClosed(1, 20)
+                .mapToObj(number -> scope(String.format(
+                        "00000000-0000-0000-0000-%012d", number)))
+                .toList();
+        Map<WorkspaceScope, Integer> remaining = new LinkedHashMap<>();
+        scopes.forEach(scope -> remaining.put(scope, 5));
+        Set<WorkspaceScope> served = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        AtomicInteger executed = new AtomicInteger();
+        AtomicInteger largestClaim = new AtomicInteger();
+        when(fixture.workspaces.listForBackgroundProcessing()).thenReturn(scopes);
+        when(fixture.kernel.claim(
+                org.mockito.ArgumentMatchers.any(WorkspaceScope.class),
+                org.mockito.ArgumentMatchers.eq(fixture.owner()),
+                org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(invocation -> {
+                    WorkspaceScope scope = invocation.getArgument(0);
+                    int limit = invocation.getArgument(2);
+                    int count;
+                    synchronized (remaining) {
+                        count = Math.min(remaining.get(scope), limit);
+                        remaining.put(scope, remaining.get(scope) - count);
+                    }
+                    largestClaim.accumulateAndGet(count, Math::max);
+                    return IntStream.range(0, count)
+                            .mapToObj(ignored ->
+                                    build(BuildStatus.EMBEDDING, BuildStep.EMBEDDING))
+                            .toList();
+                });
+        org.mockito.Mockito.doAnswer(invocation -> {
+            served.add(invocation.getArgument(0));
+            executed.incrementAndGet();
+            return null;
+        }).when(fixture.dispatcher).execute(
+                org.mockito.ArgumentMatchers.any(WorkspaceScope.class),
+                org.mockito.ArgumentMatchers.any(BuildRow.class),
+                org.mockito.ArgumentMatchers.eq(fixture.owner()));
+
+        long started = System.nanoTime();
+        try {
+            while (executed.get() < 100) {
+                fixture.runner.poll();
+                await(() -> fixture.runner.inFlight() == 0);
+            }
+
+            assertThat(executed).hasValue(100);
+            assertThat(remaining.values()).containsOnly(0);
+            assertThat(served).containsExactlyInAnyOrderElementsOf(scopes);
+            assertThat(largestClaim.get()).isLessThanOrEqualTo(concurrency);
+            System.out.printf(
+                    "P2.2d-5 scheduler builds=100 workspaces=20 concurrency=%d durationMs=%d%n",
+                    concurrency,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+        } finally {
+            fixture.runner.stop();
+        }
+    }
+
     @Test
     void bothGatesFailClosedBeforeResolvingTheDispatcherOrScanningWorkspaces() {
         Fixture runnerDisabled = fixture(false, true, 1, Duration.ofSeconds(1));

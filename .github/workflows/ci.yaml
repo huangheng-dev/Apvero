@@ -115,6 +115,25 @@ jobs:
           tags: apvero/ai-worker:ci
           cache-from: type=gha,scope=ai-worker
           cache-to: type=gha,mode=max,scope=ai-worker
+      - name: Verify ai-worker base-image security disposition
+        shell: bash
+        run: |
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{.Config.User}}')" = "10002:10002"
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{index .Config.Labels "org.opencontainers.image.base.name"}}')" = "docker.io/library/python:3.14.6-slim-trixie"
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{index .Config.Labels "org.opencontainers.image.base.digest"}}')" = "sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
+          docker run --rm --entrypoint sh apvero/ai-worker:ci -ec '
+            test "$(python --version)" = "Python 3.14.6"
+            dpkg-query -W perl-base | grep -Eq "^perl-base[[:space:]]+5\.40\.1-6$"
+            test "$(perl -MSocket -e "print Socket->VERSION")" = "2.038"
+            if perl -MIO::Compress::Zip -e 1 2>/dev/null; then
+              echo "IO::Compress::Zip unexpectedly became reachable" >&2
+              exit 1
+            fi
+            if perl -MIO::Uncompress::Unzip -e 1 2>/dev/null; then
+              echo "IO::Uncompress::Unzip unexpectedly became reachable" >&2
+              exit 1
+            fi
+          '
 
   knowledge-compose:
     needs: [backend, worker]
@@ -135,6 +154,16 @@ jobs:
       APVERO_KNOWLEDGE_RUNNER_BACKOFF_BASE: 30s
       APVERO_KNOWLEDGE_RUNNER_BACKOFF_MAXIMUM: 30s
       APVERO_KNOWLEDGE_RUNNER_GRACEFUL_DRAIN: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED: "false"
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_CLAIM_BATCH: 1
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_CONCURRENCY: 1
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_LEASE_DURATION: 6s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_EXTERNAL_CALL_TIMEOUT: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_COMMIT_MARGIN: 1s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_POLL_INTERVAL: 200ms
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_BACKOFF_BASE: 200ms
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_BACKOFF_MAXIMUM: 2s
+      APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_GRACEFUL_DRAIN: 2s
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
@@ -166,6 +195,27 @@ jobs:
           "${compose[@]}" start ai-worker
           "${compose[@]}" up -d --wait --wait-timeout 120 postgres ai-worker platform-server
           uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py wait-job "$job_id" READY
+      - name: Verify disabled, automatic Build and crash recovery paths
+        shell: bash
+        run: |
+          compose=(docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml)
+          verify=(uv run --project apps/ai-worker python deploy/compose/verify_index_build.py)
+
+          "${verify[@]}" bootstrap-disabled
+          APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=true \
+            "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" verify-ready
+
+          "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" create-recovery
+          "${compose[@]}" stop platform-server
+          "${verify[@]}" mark-recovery-inflight
+          APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=true \
+            "${compose[@]}" up -d --no-build --force-recreate \
+            --wait --wait-timeout 120 platform-server
+          "${verify[@]}" verify-recovery
       - name: Capture service state and logs
         if: always()
         run: |

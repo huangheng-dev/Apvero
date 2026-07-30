@@ -32,10 +32,14 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -96,6 +100,48 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
     @Autowired ExecutionGovernance governance;
     @Autowired AuditEventCatalog auditEvents;
     @Autowired JdbcTemplate sql;
+
+    @ParameterizedTest(name = "publishes the reference envelope at {0} entries")
+    @ValueSource(ints = {1, 100, 1000})
+    @Timeout(value = 120, unit = TimeUnit.SECONDS)
+    void validatesAndPublishesTheReferenceEntryEnvelope(int entryCount) {
+        Fixture fixture = createFixture(entryCount);
+        BuildRow build = repository.findBuild(fixture.scope(), fixture.buildId()).orElseThrow();
+        long queueStarted = System.nanoTime();
+
+        while (build.currentStep() == BuildStep.EMBEDDING) {
+            BuildRow claim = kernel.claim(
+                    fixture.scope(), "d5-envelope-worker", 1).getFirst();
+            build = orchestrator.executeClaim(
+                    fixture.scope(), claim, "d5-envelope-worker").build();
+        }
+        long validationStarted = System.nanoTime();
+        BuildRow validationClaim =
+                kernel.claim(fixture.scope(), "d5-envelope-worker", 1).getFirst();
+        BuildRow validated = validation.executeClaim(
+                fixture.scope(), validationClaim, "d5-envelope-worker").build();
+        BuildRow publicationClaim =
+                kernel.claim(fixture.scope(), "d5-envelope-worker", 1).getFirst();
+        long publicationStarted = System.nanoTime();
+        KnowledgeIndexPublicationOutcome published = publication.publish(
+                fixture.scope(), publicationClaim, "d5-envelope-worker");
+        long completed = System.nanoTime();
+
+        assertThat(validated.status()).isEqualTo(BuildStatus.VALIDATING);
+        assertThat(published.status()).isEqualTo(Status.PUBLISHED);
+        assertThat(published.build().status()).isEqualTo(BuildStatus.READY);
+        assertThat(repository.listEntries(fixture.scope(), fixture.buildId()))
+                .hasSize(entryCount);
+        assertThat(repository.listVersions(
+                fixture.scope(), published.index().id())).hasSize(1);
+        System.out.printf(
+                "P2.2d-5 envelope entries=%d queueToValidationMs=%d "
+                        + "validationMs=%d publicationMs=%d%n",
+                entryCount,
+                TimeUnit.NANOSECONDS.toMillis(validationStarted - queueStarted),
+                TimeUnit.NANOSECONDS.toMillis(publicationStarted - validationStarted),
+                TimeUnit.NANOSECONDS.toMillis(completed - publicationStarted));
+    }
 
     @Test
     void closesGovernedEmbeddingAndAdvancesCompleteArtifactToValidating() {
@@ -616,6 +662,10 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
     }
 
     private Fixture createFixture() {
+        return createFixture(1);
+    }
+
+    private Fixture createFixture(int entryCount) {
         UUID tenantId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
         WorkspaceScope scope = new WorkspaceScope(tenantId, workspaceId);
@@ -623,7 +673,10 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
         UUID sourceId = UUID.randomUUID();
         UUID revisionId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
-        UUID chunkId = UUID.randomUUID();
+        List<UUID> chunkIds = IntStream.range(0, entryCount)
+                .mapToObj(ignored -> UUID.randomUUID())
+                .toList();
+        UUID chunkId = chunkIds.getFirst();
         UUID providerId = UUID.randomUUID();
         UUID modelId = UUID.randomUUID();
         UUID routeId = UUID.randomUUID();
@@ -667,15 +720,35 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                 values (?, ?, ?, ?, 0, 'D3 Document', ?,
                     'apvero-text@1.0.0', 'apvero-default@1.0.0', ?)
                 """, documentId, tenantId, workspaceId, revisionId, digest("hello"), now);
-        sql.update("""
+        List<Object[]> chunks = IntStream.range(0, entryCount)
+                .mapToObj(ordinal -> {
+                    String text = "hello-" + ordinal;
+                    return new Object[] {
+                        chunkIds.get(ordinal),
+                        tenantId,
+                        workspaceId,
+                        revisionId,
+                        documentId,
+                        ordinal,
+                        text,
+                        digest(text),
+                        ordinal * 16,
+                        ordinal * 16 + text.length(),
+                        ordinal + 1,
+                        ordinal + 1,
+                        ordinal + 1,
+                        now
+                    };
+                })
+                .toList();
+        sql.batchUpdate("""
                 insert into knowledge_chunk(
                     id, tenant_id, workspace_id, source_revision_id, document_id,
                     ordinal, text, content_digest, start_offset, end_offset,
                     paragraph_number, line_start, line_end, chunker_version, created_at)
-                values (?, ?, ?, ?, ?, 0, 'hello', ?, 0, 5, 1, 1, 1,
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     'apvero-boundary@1.0.0', ?)
-                """, chunkId, tenantId, workspaceId, revisionId,
-                documentId, digest("hello"), now);
+                """, chunks);
         sql.update("""
                 insert into knowledge_ingestion_job(
                     id, tenant_id, workspace_id, knowledge_base_id, source_id,
@@ -726,11 +799,11 @@ class P22d3KnowledgeEmbeddingOrchestrationIntegrationTest {
                         "apvero-text@1.0.0",
                         "apvero-boundary@1.0.0",
                         1,
-                        1)));
+                        entryCount)));
         BuildRow build = repository.insertBuild(scope, new BuildRow(
                 buildId, tenantId, workspaceId, indexId, baseId, "1.0.0",
                 routeId, routeName + "@1", 256, 8192, 64, "L2",
-                digest("request"), sourceSetDigest, 1, 1,
+                digest("request-" + entryCount), sourceSetDigest, 1, entryCount,
                 BuildStatus.QUEUED, BuildStep.EMBEDDING, 0, 3, false,
                 null, null, null, 1, false, 0, 0, null,
                 null, null, null, null, null, false, "{}",
