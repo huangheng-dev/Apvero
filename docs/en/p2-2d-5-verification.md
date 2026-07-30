@@ -10,6 +10,8 @@ Status: implementation checkpoint candidate; maintainer acceptance required
   `sha256:c7f2614961989aa88ab29a618f72aa92611bb3df6451fde9df3606e68444f41f`
 - Local AI worker image:
   `sha256:84b4ce3bb3710db35fbe1e2cc0d5ca0abe55c9dad31f72c59ba8a468d289c440`
+- AI worker base image:
+  `python:3.14.6-slim-trixie@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6`
 
 The image identities prove the local Compose run only. The implementation identity pins the tested
 code and acceptance assets; the follow-up evidence commit changes documentation only. GitHub CI
@@ -151,6 +153,9 @@ Recorded local results:
 - AI worker image scan completed and reported Debian `perl 5.40.1-6` with
   `CVE-2026-12087` (CRITICAL), `CVE-2026-48959` (HIGH) and `CVE-2026-48962` (HIGH);
   Docker Scout reported no fixed version;
+- the base-image disposition check confirmed Python `3.14.6`, non-root runtime identity
+  `10002:10002`, `perl-base 5.40.1-6`, `Socket 2.038`, and the absence of both
+  `IO::Compress::Zip` and `IO::Uncompress::Unzip`;
 - platform image scan did not complete because the Trivy Java database download from GHCR ended
   with `unexpected EOF`; this is an unresolved verification item, not a pass.
 
@@ -166,6 +171,26 @@ GitHub CI remains the authoritative clean-run confirmation after the candidate i
 - Knowledge keeps only its approved public dependencies on Identity, Capability Registry and
   Governance.
 - Base Compose and the Knowledge overlay keep the Build runner disabled unless explicitly enabled.
+- The AI worker keeps its existing containment controls: non-root UID/GID `10002`, read-only root
+  filesystem, bounded `tmpfs` with `noexec,nosuid,nodev`, all Linux capabilities dropped,
+  `no-new-privileges`, and explicit memory/CPU limits.
+
+### Worker base-image vulnerability disposition
+
+The maintainer-approved disposition preserves the Python 3.14 and Debian Trixie baseline while
+making its exact upstream identity reproducible:
+
+| Finding | Disposition | Evidence and follow-up |
+| --- | --- | --- |
+| `CVE-2026-48959` | Not affected: vulnerable code is not present | `IO::Uncompress::Unzip` is absent; CI fails if it becomes importable. |
+| `CVE-2026-48962` | Not affected: vulnerable code is not present | `IO::Compress::Zip` is absent; CI fails if it becomes importable. |
+| `CVE-2026-12087` | Temporarily accepted, constrained upstream risk | `Socket 2.038` is inherited through Debian Essential `perl-base`; Apvero does not invoke Perl, and the worker containment controls limit impact. Track Debian Trixie and update immediately when a fixed stable package or refreshed official Python image exists. |
+
+Debian classifies all three Trixie findings as `no-dsa` minor issues. This disposition does not
+erase scanner findings, claim the vulnerable package was fixed, or authorize a permanent
+exception. Switching to Alpine, Debian Forky or a distroless redesign was rejected because it
+would introduce a libc, stability or build-boundary change unrelated to P2.2d-5. Removing
+`perl-base` was rejected because it is an Essential Debian package.
 
 Rollback is configuration-first: set
 `APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=false` and recreate the platform server. Existing
@@ -181,8 +206,8 @@ then be reverted without a data rollback because this slice adds no migration.
 - CI timing varies on shared runners and is evidence, not an SLA.
 - The Compose fixture uses SQL for contract-only Index and Route prerequisites until accepted
   creation APIs exist.
-- The worker base-image findings require a maintainer-approved remediation or explicit security
-  disposition; this slice does not silently change the approved base-image baseline.
+- The worker base-image findings remain visible under the explicit disposition above. CI proves
+  the current reachability assumptions, and any upstream package/module change must be reviewed.
 - The platform image scan must be retried when the external vulnerability database is reachable.
 - The clean Linux Compose run remains a GitHub CI responsibility.
 - Windows Docker contention prevented one uninterrupted all-platform invocation from staying

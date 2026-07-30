@@ -115,6 +115,25 @@ jobs:
           tags: apvero/ai-worker:ci
           cache-from: type=gha,scope=ai-worker
           cache-to: type=gha,mode=max,scope=ai-worker
+      - name: Verify ai-worker base-image security disposition
+        shell: bash
+        run: |
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{.Config.User}}')" = "10002:10002"
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{index .Config.Labels "org.opencontainers.image.base.name"}}')" = "docker.io/library/python:3.14.6-slim-trixie"
+          test "$(docker image inspect apvero/ai-worker:ci --format '{{index .Config.Labels "org.opencontainers.image.base.digest"}}')" = "sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
+          docker run --rm --entrypoint sh apvero/ai-worker:ci -ec '
+            test "$(python --version)" = "Python 3.14.6"
+            dpkg-query -W perl-base | grep -Eq "^perl-base[[:space:]]+5\.40\.1-6$"
+            test "$(perl -MSocket -e "print Socket->VERSION")" = "2.038"
+            if perl -MIO::Compress::Zip -e 1 2>/dev/null; then
+              echo "IO::Compress::Zip unexpectedly became reachable" >&2
+              exit 1
+            fi
+            if perl -MIO::Uncompress::Unzip -e 1 2>/dev/null; then
+              echo "IO::Uncompress::Unzip unexpectedly became reachable" >&2
+              exit 1
+            fi
+          '
 
   knowledge-compose:
     needs: [backend, worker]

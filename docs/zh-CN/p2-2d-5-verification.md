@@ -10,6 +10,8 @@
   `sha256:c7f2614961989aa88ab29a618f72aa92611bb3df6451fde9df3606e68444f41f`
 - 本地 AI worker 镜像：
   `sha256:84b4ce3bb3710db35fbe1e2cc0d5ca0abe55c9dad31f72c59ba8a468d289c440`
+- AI worker 基础镜像：
+  `python:3.14.6-slim-trixie@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6`
 
 镜像身份只证明本地 Compose 运行。实现身份固定已测试代码和验收资产；后续证据提交
 只修改文档。完整推送候选仍必须通过 GitHub CI，才能成为发布证据。
@@ -144,6 +146,9 @@ git diff --check
 - AI worker 镜像扫描完成，报告 Debian `perl 5.40.1-6` 存在
   `CVE-2026-12087`（CRITICAL）、`CVE-2026-48959`（HIGH）和
   `CVE-2026-48962`（HIGH）；Docker Scout 标记暂无修复版本；
+- 基础镜像处置检查确认 Python `3.14.6`、非 root 运行身份 `10002:10002`、
+  `perl-base 5.40.1-6`、`Socket 2.038`，并确认 `IO::Compress::Zip` 与
+  `IO::Uncompress::Unzip` 均不存在；
 - 平台镜像扫描因从 GHCR 下载 Trivy Java 数据库时出现 `unexpected EOF` 而未完成；
   这是未解决验证项，不算通过。
 
@@ -157,6 +162,24 @@ git diff --check
   Release 语义或生产默认值。
 - Knowledge 仍只依赖已批准的 Identity、Capability Registry 和 Governance 公开 API。
 - 基础 Compose 和 Knowledge overlay 都不会在未显式开启时运行 Build runner。
+- AI worker 保持既有隔离控制：非 root UID/GID `10002`、只读根文件系统、带
+  `noexec,nosuid,nodev` 的有界 `tmpfs`、删除全部 Linux capabilities、
+  `no-new-privileges`，以及明确的内存/CPU 限制。
+
+### Worker 基础镜像漏洞处置
+
+维护者批准的处置保持 Python 3.14 与 Debian Trixie 基线，同时把上游身份固定为可复现值：
+
+| 发现项 | 处置 | 证据与后续 |
+| --- | --- | --- |
+| `CVE-2026-48959` | 不受影响：漏洞代码不存在 | `IO::Uncompress::Unzip` 不存在；模块一旦可导入，CI 立即失败。 |
+| `CVE-2026-48962` | 不受影响：漏洞代码不存在 | `IO::Compress::Zip` 不存在；模块一旦可导入，CI 立即失败。 |
+| `CVE-2026-12087` | 临时接受、受约束的上游风险 | `Socket 2.038` 由 Debian Essential `perl-base` 继承；Apvero 不调用 Perl，Worker 隔离控制限制影响。持续跟踪 Debian Trixie，稳定版修复包或刷新后的官方 Python 镜像出现后立即升级。 |
+
+Debian 将这三个 Trixie 发现项均归类为 `no-dsa` 的轻微问题。本处置不会删除扫描发现、
+宣称漏洞包已修复或授权永久豁免。拒绝切换到 Alpine、Debian Forky 或 Distroless 重构，
+因为它们会引入与 P2.2d-5 无关的 libc、稳定性或构建边界变化。拒绝删除 `perl-base`，
+因为它是 Debian Essential 包。
 
 回滚优先使用配置：设置
 `APVERO_KNOWLEDGE_INDEX_BUILD_RUNNER_ENABLED=false` 并重新创建平台服务。已有 Build 和
@@ -169,8 +192,8 @@ git diff --check
 - PostgreSQL 轮询与 O(entries) 验证仍是 P2.2d 已接受设计；声明支持更大 corpus 前必须重新测量。
 - 共享 runner 的 CI 时间是证据，不是 SLA。
 - 在正式创建 API 被接受前，Compose fixture 仍通过 SQL 准备 contract-only 的 Index 和 Route。
-- Worker 基础镜像发现项需要维护者批准修复方案或明确安全处置；本切片不会静默改变
-  已批准的基础镜像基线。
+- Worker 基础镜像发现项继续按上述明确处置保持可见。CI 证明当前可达性假设；任何上游
+  包或模块变化都必须重新审查。
 - 外部漏洞数据库可用后必须重试平台镜像扫描。
 - 全新的 Linux Compose 运行仍由 GitHub CI 负责。
 - Windows Docker 资源竞争导致单次全平台调用无法保持全绿；分区重跑已关闭全部失败测试，

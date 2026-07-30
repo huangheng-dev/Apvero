@@ -1,7 +1,9 @@
-FROM python:3.14-slim
+FROM python:3.14.6-slim-trixie@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6
 LABEL org.opencontainers.image.title="Apvero AI Worker"
 LABEL org.opencontainers.image.source="https://github.com/huangheng-dev/Apvero"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.base.name="docker.io/library/python:3.14.6-slim-trixie"
+LABEL org.opencontainers.image.base.digest="sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN useradd --system --uid 10002 --create-home apvero
 WORKDIR /app
