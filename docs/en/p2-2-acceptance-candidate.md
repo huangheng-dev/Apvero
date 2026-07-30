@@ -1,6 +1,6 @@
 # P2.2 Immutable Index and Retrieval Lab Acceptance Candidate
 
-Status: candidate assembled on 2026-07-31; not yet accepted.
+Status: clean-host candidate CI passed on 2026-07-31; awaiting maintainer acceptance.
 
 P2.2 and P2.2f remain `in-progress`. Knowledge remains disabled by default and the Knowledge
 product surface remains non-live. Maintainer approval and a green clean-host candidate CI run are
@@ -66,29 +66,47 @@ most 1,000 Entries per immutable Index Version at 256 dimensions. Retrieval-only
 declared scenario remained below the local 300 ms database/JDBC p95 target, including eight-reader
 write pressure. This is a measured reference envelope, not a portable SLA.
 
-## External gates still open
+## Clean-host candidate evidence
 
-The local environment could not complete two network-dependent checks:
+Draft [PR #37](https://github.com/huangheng-dev/Apvero/pull/37) contains one cumulative P2.2
+candidate commit, `67127305662b51ddf3ac669ebf28c16c161d504f`. Its Git Data API publication
+verified every changed Blob, the complete Tree, the Commit parent and the branch Ref. The remote
+Tree `56d99ab21814367475cb62fb3b453f94136ad45c` exactly matches the locally verified `HEAD` Tree.
 
-1. `pip-audit` reached neither PyPI nor OSV reliably. The final OSV attempt ended with
-   `SSL: UNEXPECTED_EOF_WHILE_READING`; it produced no vulnerability result and is not recorded as
-   a pass.
-2. The five-source Compose workflow completed text, Markdown, PDF and DOCX, but the required real
-   `https://example.com/` capture failed after three bounded retries. The host showed the same
-   external connectivity failure. The product correctly persisted typed
-   `APVERO_KNOWLEDGE_WEB_FETCH_TIMEOUT` / `APVERO_KNOWLEDGE_WEB_FETCH_FAILED` outcomes.
+[CI run 30564010885](https://github.com/huangheng-dev/Apvero/actions/runs/30564010885) passed all
+seven jobs:
 
-These failures did not justify a code, timeout, architecture or test-fixture change. The clean-host
-candidate CI run must pass both checks before maintainer acceptance.
+- backend;
+- console;
+- worker, including `pip-audit`;
+- contracts;
+- Compose configuration;
+- container builds and runtime security;
+- `knowledge-compose`.
+
+The clean-host `knowledge-compose` job completed the real five-source workflow, including
+`https://example.com/`, unchanged resynchronization and tombstone rejection. It then proved
+persisted retry across Platform restart, disabled and automatic Index Build behavior, persisted
+`IN_FLIGHT` crash recovery, service-state capture and isolated-stack cleanup.
+
+The earlier local OSV TLS interruption and public-web fetch failure are therefore classified as
+local external-network limitations, not product failures. No code, timeout, architecture or test
+fixture was weakened to bypass them.
 
 ## Acceptance procedure
 
-1. Commit and publish the cumulative P2.2 candidate branch.
-2. Open one P2.2 candidate pull request.
-3. Require all clean-host CI jobs, including dependency audit and `knowledge-compose`, to pass.
-4. Record candidate PR, head commit and CI run identities.
-5. Ask the maintainer to accept P2.2 explicitly.
-6. Only after approval, mark P2.2f and P2.2 `completed` and create the final acceptance record.
+Completed:
+
+1. The cumulative P2.2 candidate was committed and published.
+2. One P2.2 Draft PR was opened.
+3. Every clean-host CI job, including dependency audit and `knowledge-compose`, passed.
+4. Candidate PR, head Commit, Tree and CI identities are recorded above.
+
+Remaining:
+
+1. The maintainer explicitly accepts P2.2.
+2. Only after approval, mark P2.2f and P2.2 `completed`, create the final acceptance record, turn
+   PR #37 Ready and merge it.
 
 ## Rollback
 

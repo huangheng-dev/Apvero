@@ -1,6 +1,6 @@
 # P2.2 不可变索引与检索实验室验收候选
 
-状态：候选记录于 2026-07-31 汇总，尚未验收。
+状态：干净环境候选 CI 已于 2026-07-31 通过，等待维护者验收。
 
 P2.2 与 P2.2f 均保持 `in-progress`。Knowledge 仍默认禁用，Knowledge 产品页面仍未上线。
 只有维护者批准且候选分支的干净环境 CI 全绿后，才能把这两个状态改为 `completed`。
@@ -60,28 +60,45 @@ Entry、256 维。仅检索证据覆盖 256 维 10,000 个 Entry，以及 384、
 5,000 个 Entry。包括八读者写入压力在内的所有声明场景，其本地数据库/JDBC p95 均低于
 300 ms。这是参考环境实测边界，不是可移植 SLA。
 
-## 尚未关闭的外部门禁
+## 干净环境候选证据
 
-当前本地环境无法完成两项依赖公网的检查：
+Draft [PR #37](https://github.com/huangheng-dev/Apvero/pull/37) 只包含一个累计 P2.2 候选
+提交 `67127305662b51ddf3ac669ebf28c16c161d504f`。通过 Git Data API 发布时，已逐一
+校验所有变更 Blob、完整 Tree、Commit 父节点与分支 Ref。远端 Tree
+`56d99ab21814367475cb62fb3b453f94136ad45c` 与本地已验证 `HEAD` Tree 完全一致。
 
-1. `pip-audit` 无法稳定访问 PyPI 或 OSV。最后一次 OSV 请求以
-   `SSL: UNEXPECTED_EOF_WHILE_READING` 结束；它没有生成漏洞结论，因此不能记为通过。
-2. 五来源 Compose 流程已完成文本、Markdown、PDF 和 DOCX，但要求的真实
-   `https://example.com/` 抓取在三次有界重试后失败；宿主机也出现相同外网连接失败。
-   产品按设计持久化了类型化 `APVERO_KNOWLEDGE_WEB_FETCH_TIMEOUT` /
-   `APVERO_KNOWLEDGE_WEB_FETCH_FAILED` 结果。
+[CI Run 30564010885](https://github.com/huangheng-dev/Apvero/actions/runs/30564010885) 的七个
+任务全部通过：
 
-这些失败不足以成为修改代码、超时、架构或测试夹具的理由。维护者验收前，干净环境候选
-CI 必须通过这两项检查。
+- Backend；
+- Console；
+- Worker，包括 `pip-audit`；
+- Contracts；
+- Compose 配置；
+- 容器构建与运行时安全；
+- `knowledge-compose`。
+
+干净环境 `knowledge-compose` 已完成真实五来源工作流，包括 `https://example.com/`、
+未变化重同步和墓碑拒绝；随后验证了跨 Platform 重启的持久化重试、Index Build 禁用与
+自动构建、持久化 `IN_FLIGHT` 崩溃恢复、服务状态取证及隔离栈清理。
+
+因此，先前本地 OSV TLS 中断和公网网页抓取失败被归类为本地外部网络限制，而不是产品
+失败。整个过程中没有通过削弱代码、超时、架构或测试夹具来绕过门禁。
 
 ## 验收流程
 
-1. 提交并发布 P2.2 累计候选分支。
-2. 只创建一个 P2.2 候选 Pull Request。
-3. 要求全部干净环境 CI 任务通过，包括依赖审计与 `knowledge-compose`。
-4. 记录候选 PR、头提交及 CI Run 标识。
-5. 请求维护者明确验收 P2.2。
-6. 只有批准后，才把 P2.2f 与 P2.2 标为 `completed` 并建立最终验收记录。
+已完成：
+
+1. 已提交并发布 P2.2 累计候选。
+2. 已只创建一个 P2.2 Draft PR。
+3. 包括依赖审计与 `knowledge-compose` 在内的全部干净环境 CI 任务已通过。
+4. 候选 PR、头 Commit、Tree 与 CI 标识已记录在上文。
+
+待完成：
+
+1. 维护者明确验收 P2.2。
+2. 只有批准后，才把 P2.2f 与 P2.2 标为 `completed`，建立最终验收记录，将 PR #37
+   转为 Ready 并合并。
 
 ## 回滚
 
