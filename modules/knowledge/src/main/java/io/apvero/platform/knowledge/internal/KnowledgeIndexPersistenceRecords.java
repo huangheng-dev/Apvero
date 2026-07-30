@@ -182,4 +182,23 @@ final class KnowledgeIndexPersistenceRecords {
             String artifactDigest,
             String status,
             OffsetDateTime publishedAt) {}
+
+    record ExactRetrievalCandidate(
+            int rank,
+            BigDecimal score,
+            UUID sourceId,
+            UUID sourceRevisionId,
+            UUID documentId,
+            UUID chunkId,
+            String contentDigest,
+            String content,
+            String sourceTitle,
+            String sourceType,
+            int startOffset,
+            int endOffset,
+            Integer page,
+            String heading,
+            Integer paragraph,
+            Integer lineStart,
+            Integer lineEnd) {}
 }

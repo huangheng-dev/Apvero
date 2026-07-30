@@ -134,6 +134,26 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
 
     @Override
     @Transactional
+    public RetentionPolicy getOrCreate(UUID workspaceId) {
+        WorkspaceScope scope = workspaces.require(workspaceId);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        sql.insertInto(table("retention_policy"))
+                .columns(field("workspace_id"), field("tenant_id"), field("run_retention_days"),
+                        field("audit_retention_days"), field("retain_payloads"), field("mask_sensitive_fields"),
+                        field("version"), field("created_at"), field("updated_at"))
+                .values(workspaceId, scope.tenantId(), 90, 365, true, true, 1L, now, now)
+                .onConflict(field("workspace_id"))
+                .doNothing()
+                .execute();
+        RetentionPolicy current = get(workspaceId);
+        if (current.version() < 1) {
+            throw new IllegalStateException("APVERO_RETENTION_POLICY_VERSION_INVALID");
+        }
+        return current;
+    }
+
+    @Override
+    @Transactional
     public RetentionPolicy update(UUID workspaceId, int runRetentionDays, int auditRetentionDays,
             boolean retainPayloads, boolean maskSensitiveFields) {
         if (runRetentionDays < 1 || runRetentionDays > 3650 || auditRetentionDays < 30 || auditRetentionDays > 3650) {
@@ -180,6 +200,33 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     @Transactional
     public void append(UUID workspaceId, String actorId, String action, String resourceType,
             String resourceId, String outcome, String sourceIp, String traceId) {
+        appendInternal(
+                workspaceId, actorId, action, resourceType, resourceId, outcome, sourceIp, traceId,
+                JSONB.valueOf("{}"));
+    }
+
+    @Override
+    @Transactional
+    public void appendWithDigest(UUID workspaceId, String actorId, String action, String resourceType,
+            String resourceId, String outcome, String sourceIp, String traceId, String digest) {
+        if (digest == null || !digest.matches("^sha256:[a-f0-9]{64}$")) {
+            throw new IllegalArgumentException("APVERO_AUDIT_DIGEST_INVALID");
+        }
+        appendInternal(
+                workspaceId, actorId, action, resourceType, resourceId, outcome, sourceIp, traceId,
+                JSONB.valueOf("{\"digest\":\"" + digest + "\"}"));
+    }
+
+    private void appendInternal(
+            UUID workspaceId,
+            String actorId,
+            String action,
+            String resourceType,
+            String resourceId,
+            String outcome,
+            String sourceIp,
+            String traceId,
+            JSONB details) {
         WorkspaceScope scope = workspaces.require(workspaceId);
         sql.insertInto(table("audit_event"))
                 .columns(field("id"), field("tenant_id"), field("workspace_id"), field("occurred_at"),
@@ -187,7 +234,7 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                         field("outcome"), field("source_ip"), field("trace_id"), field("details"))
                 .values(UUID.randomUUID(), scope.tenantId(), workspaceId, OffsetDateTime.now(ZoneOffset.UTC),
                         safe(actorId, "anonymous"), safe(action, "unknown"), safe(resourceType, "api"), resourceId,
-                        outcome, sourceIp, traceId, JSONB.valueOf("{}"))
+                        outcome, sourceIp, traceId, details)
                 .execute();
     }
 

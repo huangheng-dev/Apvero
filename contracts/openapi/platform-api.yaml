@@ -1008,7 +1008,6 @@ paths:
       tags: [Knowledge]
       summary: List immutable retrieval policy versions
       operationId: listRetrievalPolicyVersions
-      x-apvero-implementation-status: contract-only
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
       responses:
         "200":
@@ -1022,7 +1021,6 @@ paths:
       tags: [Knowledge]
       summary: Publish an immutable retrieval policy version
       operationId: createRetrievalPolicyVersion
-      x-apvero-implementation-status: contract-only
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
       requestBody:
         required: true
@@ -1041,7 +1039,6 @@ paths:
       tags: [Knowledge]
       summary: Inspect ranked evidence from an exact index and policy version
       operationId: testKnowledgeRetrieval
-      x-apvero-implementation-status: contract-only
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }]
       requestBody:
         required: true

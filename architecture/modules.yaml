@@ -1,5 +1,5 @@
 schemaVersion: 1
-lastReviewed: 2026-07-22
+lastReviewed: 2026-07-30
 basePackage: io.apvero.platform
 
 modules:
@@ -43,8 +43,8 @@ modules:
     status: in-progress
     implementationStatus: contract-only
     approvedBy: ADR-0006
-    implementedOwns: [knowledge-base, knowledge-source, source-revision, document, chunk, ingestion-job, retrieval-policy-version, knowledge-index, index-build, immutable-index-version]
-    plannedOwns: [retrieval-service]
+    implementedOwns: [knowledge-base, knowledge-source, source-revision, document, chunk, ingestion-job, retrieval-policy-version, knowledge-index, index-build, immutable-index-version, retrieval-service]
+    plannedOwns: []
     publicApi: io.apvero.platform.knowledge
     databaseTables: [knowledge_base, knowledge_source, knowledge_source_revision, knowledge_document, knowledge_chunk, knowledge_ingestion_job, retrieval_policy_version, knowledge_index, knowledge_index_build, knowledge_index_build_revision, knowledge_index_entry, knowledge_index_version]
     plannedDatabaseTables: []

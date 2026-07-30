@@ -8,4 +8,7 @@ public interface AuditEventCatalog {
 
     void append(UUID workspaceId, String actorId, String action, String resourceType,
             String resourceId, String outcome, String sourceIp, String traceId);
+
+    void appendWithDigest(UUID workspaceId, String actorId, String action, String resourceType,
+            String resourceId, String outcome, String sourceIp, String traceId, String digest);
 }

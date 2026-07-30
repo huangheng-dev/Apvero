@@ -1,6 +1,6 @@
 # P2.2 Immutable Index and Retrieval Lab — Implementation Plan
 
-Status: maintainer-approved design; P2.2a through P2.2d accepted; P2.2e is next
+Status: maintainer-approved design; P2.2a through P2.2e accepted; P2.2f is in progress
 
 Target stage: P2, milestone P2.2
 

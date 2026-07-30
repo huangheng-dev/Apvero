@@ -22,12 +22,15 @@ class KnowledgeOpenApiConformanceTest {
             "/api/v1/knowledge-sources",
             "/api/v1/knowledge-source-revisions",
             "/api/v1/knowledge-ingestion-jobs");
-    private static final Set<Operation> P22D1_OPERATIONS = Set.of(
+    private static final Set<Operation> IMPLEMENTED_KNOWLEDGE_OPERATIONS = Set.of(
             new Operation("get", "/api/v1/knowledge-indexes/{indexId}/builds"),
             new Operation("post", "/api/v1/knowledge-indexes/{indexId}/builds"),
             new Operation("get", "/api/v1/knowledge-index-builds/{buildId}"),
             new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/retry"),
-            new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/cancel"));
+            new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/cancel"),
+            new Operation("get", "/api/v1/retrieval-policy-versions"),
+            new Operation("post", "/api/v1/retrieval-policy-versions"),
+            new Operation("post", "/api/v1/knowledge-retrieval-tests"));
 
     @Test
     void everyImplementedKnowledgeOperationMatchesTheCommittedOpenApiMethodAndPath() throws Exception {
@@ -36,7 +39,11 @@ class KnowledgeOpenApiConformanceTest {
 
     private static Set<Operation> controllerOperations() {
         Set<Operation> operations = new LinkedHashSet<>();
-        for (Class<?> controller : Set.of(KnowledgeController.class, KnowledgeIndexBuildController.class)) {
+        for (Class<?> controller : Set.of(
+                KnowledgeController.class,
+                KnowledgeIndexBuildController.class,
+                RetrievalPolicyVersionController.class,
+                KnowledgeRetrievalController.class)) {
             String basePath = controller.getAnnotation(RequestMapping.class).value()[0];
             for (Method method : controller.getDeclaredMethods()) {
                 add(operations, basePath, method, GetMapping.class, "get");
@@ -68,7 +75,10 @@ class KnowledgeOpenApiConformanceTest {
     }
 
     private static String[] firstNonEmpty(String[] value, String[] path) {
-        return value.length == 0 ? path : value;
+        if (value.length > 0) {
+            return value;
+        }
+        return path.length > 0 ? path : new String[] {""};
     }
 
     @SuppressWarnings("unchecked")
@@ -91,9 +101,9 @@ class KnowledgeOpenApiConformanceTest {
                             .as("%s %s remains contract-only until P2 acceptance", method, path)
                             .isEqualTo("contract-only");
                     operations.add(candidate);
-                } else if (P22D1_OPERATIONS.contains(candidate)) {
+                } else if (IMPLEMENTED_KNOWLEDGE_OPERATIONS.contains(candidate)) {
                     assertThat(operation)
-                            .as("%s %s is implemented by P2.2d-1", method, path)
+                            .as("%s %s is implemented", method, path)
                             .doesNotContainKey("x-apvero-implementation-status");
                     operations.add(candidate);
                 }
