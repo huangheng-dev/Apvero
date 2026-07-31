@@ -9,7 +9,7 @@ export const zhCN = {
     organizations: "组织管理", extensions: "扩展", health: "系统健康", settings: "设置",
   },
   shell: {
-    search: "搜索页面…", tenant: "Northstar 集团", workspace: "AI 平台", environment: "开发环境", rolePreview: "角色预览", documentation: "文档", architecture: "架构", theme: "主题", currentUser: "Alex Chen", commandHint: "输入内容过滤导航", menu: "打开导航", collapse: "收起导航", notifications: "通知", preview: "产品原型", primaryNavigation: "主导航",
+    search: "搜索页面…", environment: "开发环境", rolePreview: "角色预览", documentation: "文档", architecture: "架构", theme: "主题", currentUser: "Alex Chen", accountMenu: "打开账户菜单", commandHint: "输入内容过滤导航", menu: "打开导航", collapse: "收起导航", notifications: "通知", preview: "产品原型", primaryNavigation: "主导航",
   },
   role: { SYSTEM_ADMIN: "系统管理员", TENANT_ADMIN: "组织管理员", AI_ADMIN: "AI 管理员", DEVELOPER: "开发者", OPERATOR: "运维", MEMBER: "普通成员" },
   dataMode: { live: "真实数据", mixed: "真实 + 演示", demo: "演示数据" },

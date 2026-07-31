@@ -67,14 +67,25 @@ export function App() {
           return <section className="nav-group" key={group.id}><button className="nav-group-title" onClick={() => toggleGroup(group.id)}><span>{t(`nav.${group.id}`)}</span><i>{isCollapsed ? "+" : "−"}</i></button>{!isCollapsed && visible.map((entry) => <NavButton key={entry.id} item={entry} active={page === entry.id} collapsed={collapsed} onClick={() => navigate(entry.id)} />)}</section>;
         })}
       </nav>
-      <footer className="sidebar-footer"><a href="https://github.com/huangheng-dev/Apvero" target="_blank" rel="noreferrer"><span className="footer-glyph">?</span><span>{t("shell.documentation")}</span></a><div className="profile"><span className="avatar">AC</span><span><strong>{t("shell.currentUser")}</strong><small>{t(`role.${role}`)}</small></span><b>•••</b></div></footer>
     </aside>
     <main className="main-surface">
-      <header className="topbar"><div className="topbar-context"><button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label={t("shell.menu")}>☰</button><div className="top-workspace"><span className="workspace-mark">NS</span><span><strong>{t("shell.tenant")}</strong><small>{t("shell.workspace")}</small></span></div><div className="top-search"><span>⌕</span><input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder={t("shell.search")} aria-label={t("shell.search")} /><kbd>⌘K</kbd></div></div><div className="top-actions"><label className="role-preview"><span>{t("shell.rolePreview")}</span><select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((entry) => <option value={entry} key={entry}>{t(`role.${entry}`)}</option>)}</select></label><button className="utility-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{t("shell.theme")}</button><button className="language-button" onClick={changeLanguage}>{i18n.language === "zh-CN" ? "EN" : "中文"}</button></div></header>
+      <header className="topbar"><div className="topbar-context"><button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label={t("shell.menu")}>☰</button><div className="top-search"><AppIcon name="search" /><input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder={t("shell.search")} aria-label={t("shell.search")} /><kbd>⌘K</kbd></div></div><div className="top-actions"><button className="utility-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><AppIcon name={theme === "dark" ? "moon" : "sun"} /><span>{t("shell.theme")}</span></button><button className="utility-button language-button" onClick={changeLanguage}><AppIcon name="language" /><span>{i18n.language === "zh-CN" ? "English" : "中文"}</span></button><details className="account-menu"><summary aria-label={t("shell.accountMenu")}><span className="avatar">AC</span><span className="account-summary"><strong>{t("shell.currentUser")}</strong><small>{t(`role.${role}`)}</small></span><AppIcon name="chevron" /></summary><div className="account-popover"><div className="account-identity"><span className="avatar large">AC</span><span><strong>{t("shell.currentUser")}</strong><small>{t(`role.${role}`)}</small></span></div><label className="role-preview"><span>{t("shell.rolePreview")}</span><select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((entry) => <option value={entry} key={entry}>{t(`role.${entry}`)}</option>)}</select></label><a className="account-link" href="https://github.com/huangheng-dev/Apvero" target="_blank" rel="noreferrer"><AppIcon name="book" /><span>{t("shell.documentation")}</span></a></div></details></div></header>
       <div className="page-surface"><PageContent page={page} navigate={navigate} /></div>
       <footer className="product-footer"><span>Apvero v0.1.0-SNAPSHOT</span><span>{t(`dataMode.${item.dataMode}`)}</span><span>Apache-2.0</span></footer>
     </main>
   </div>;
+}
+
+function AppIcon({ name }: { name: "search" | "moon" | "sun" | "language" | "chevron" | "book" }) {
+  const paths = {
+    search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>,
+    moon: <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z" />,
+    sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    language: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9s-1.1 6.5-3.3 9c-2.2-2.5-3.3-5.5-3.3-9S9.8 5.5 12 3Z" /></>,
+    chevron: <path d="m8 10 4 4 4-4" />,
+    book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5Z" /></>,
+  };
+  return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 function NavButton({ item, active, collapsed, onClick }: { item: ReturnType<typeof findNavigationItem>; active: boolean; collapsed: boolean; onClick: () => void }) {

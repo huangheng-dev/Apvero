@@ -15,8 +15,9 @@ naming:
     - Backend tenant terminology is rendered as Organization in user-facing navigation.
 
 shell:
-  top: [organization-selector, workspace-selector, environment-selector, global-search]
-  bottom: [documentation, locale-switcher, theme, current-user]
+  top: [global-search, theme, locale-switcher, current-user]
+  accountMenu: [role-preview, documentation]
+  sidebarFooter: []
 
 navigation:
   - id: overview
