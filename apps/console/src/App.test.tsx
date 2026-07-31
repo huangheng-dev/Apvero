@@ -3,6 +3,18 @@ import { describe, expect, it } from "vitest";
 import { pageFixtures } from "./app/catalog";
 import { allPageIds, canView, findNavigationItem, legacyRedirects, navigationGroups, resolvePageId, visibleGroups, type PageId } from "./app/navigation";
 import { defaultManifest } from "./lib/api";
+import { applyLocale, toSupportedLocale } from "./lib/locale";
+
+describe("locale preference", () => {
+  it("normalizes unsupported values and persists a supported locale before applying it", async () => {
+    expect(toSupportedLocale(null)).toBe("en");
+    expect(toSupportedLocale("fr")).toBe("en");
+    expect(toSupportedLocale("zh-CN")).toBe("zh-CN");
+    const events: string[] = [];
+    await applyLocale("zh-CN", async (locale) => { events.push(`change:${locale}`); }, { setItem: (key, value) => { events.push(`store:${key}:${value}`); } });
+    expect(events).toEqual(["store:apvero.locale:zh-CN", "change:zh-CN"]);
+  });
+});
 
 describe("release manifest", () => {
   it("pins every reproducibility dependency", () => {

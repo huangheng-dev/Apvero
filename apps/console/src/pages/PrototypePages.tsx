@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { pageFixtures, type DemoRow } from "../app/catalog";
 import { groupForPage, type PageId } from "../app/navigation";
 import { api } from "../lib/api";
+import { applyLocale, toSupportedLocale, type SupportedLocale } from "../lib/locale";
 import { DataBadge, Drawer, EmptyState, ErrorPanel, Field, Modal, PageHeader, Panel, StatCard, StatusBadge, Toast, formatDate } from "../components/ui";
 import { useApplications, useReleaseCount, useRuns } from "./LivePages";
 
@@ -133,13 +134,18 @@ export function HealthPage() {
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [toast, setToast] = useState(false);
-  const initialSettings = { locale: i18n.language, retention: "90", approvals: true, budgetAlerts: true, weeklyDigest: false, workflows: false };
-  const [settings, setSettings] = useState(initialSettings);
-  const save = (event: FormEvent) => { event.preventDefault(); setToast(true); window.setTimeout(() => setToast(false), 2400); };
+  const createInitialSettings = () => ({ locale: toSupportedLocale(i18n.language), retention: "90", approvals: true, budgetAlerts: true, weeklyDigest: false, workflows: false });
+  const [settings, setSettings] = useState(createInitialSettings);
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    await applyLocale(settings.locale, (locale) => i18n.changeLanguage(locale));
+    setToast(true);
+    window.setTimeout(() => setToast(false), 2400);
+  };
   return <>
     <PageHeader title={t("nav.settings")} description={t("pages.settings")} group={t("nav.system")} mode="demo" />
     <div className="notice demo"><strong>{t("dataMode.demo")}</strong><p>{t("common.localOnly")}</p></div>
-    <form className="settings-layout" onSubmit={save}><nav className="settings-nav"><button type="button" className="active">{t("settings.general")}</button><button type="button">{t("settings.notifications")}</button><button type="button">{t("settings.featureControls")}</button></nav><Panel title={t("settings.general")} meta={t("dataMode.demo")}><div className="settings-form"><Field label={t("settings.defaultLocale")}><select value={settings.locale} onChange={(event) => setSettings({ ...settings, locale: event.target.value })}><option value="en">English</option><option value="zh-CN">简体中文</option></select></Field><Field label={t("settings.retention")}><select value={settings.retention} onChange={(event) => setSettings({ ...settings, retention: event.target.value })}><option value="30">30 {t("common.days")}</option><option value="90">90 {t("common.days")}</option><option value="365">365 {t("common.days")}</option></select></Field><Toggle label={t("settings.approvals")} checked={settings.approvals} onChange={(value) => setSettings({ ...settings, approvals: value })} /><Toggle label={t("settings.budgetAlerts")} checked={settings.budgetAlerts} onChange={(value) => setSettings({ ...settings, budgetAlerts: value })} /><Toggle label={t("settings.weeklyDigest")} checked={settings.weeklyDigest} onChange={(value) => setSettings({ ...settings, weeklyDigest: value })} /><Toggle label={t("settings.workflowBeta")} checked={settings.workflows} onChange={(value) => setSettings({ ...settings, workflows: value })} /><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setSettings({ ...initialSettings })}>{t("common.clear")}</button><button className="button primary">{t("common.savePreview")}</button></div></div></Panel></form>
+    <form className="settings-layout" onSubmit={save}><nav className="settings-nav"><button type="button" className="active">{t("settings.general")}</button><button type="button">{t("settings.notifications")}</button><button type="button">{t("settings.featureControls")}</button></nav><Panel title={t("settings.general")} meta={t("dataMode.demo")}><div className="settings-form"><Field label={t("settings.defaultLocale")}><select value={settings.locale} onChange={(event) => setSettings({ ...settings, locale: event.target.value as SupportedLocale })}><option value="en">English</option><option value="zh-CN">简体中文</option></select></Field><Field label={t("settings.retention")}><select value={settings.retention} onChange={(event) => setSettings({ ...settings, retention: event.target.value })}><option value="30">30 {t("common.days")}</option><option value="90">90 {t("common.days")}</option><option value="365">365 {t("common.days")}</option></select></Field><Toggle label={t("settings.approvals")} checked={settings.approvals} onChange={(value) => setSettings({ ...settings, approvals: value })} /><Toggle label={t("settings.budgetAlerts")} checked={settings.budgetAlerts} onChange={(value) => setSettings({ ...settings, budgetAlerts: value })} /><Toggle label={t("settings.weeklyDigest")} checked={settings.weeklyDigest} onChange={(value) => setSettings({ ...settings, weeklyDigest: value })} /><Toggle label={t("settings.workflowBeta")} checked={settings.workflows} onChange={(value) => setSettings({ ...settings, workflows: value })} /><div className="modal-actions"><button type="button" className="button ghost" onClick={() => setSettings(createInitialSettings())}>{t("common.clear")}</button><button className="button primary">{t("common.savePreview")}</button></div></div></Panel></form>
     {toast && <Toast>{t("settings.changed")}</Toast>}
   </>;
 }
