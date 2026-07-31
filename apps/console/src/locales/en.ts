@@ -9,7 +9,7 @@ export const en = {
     organizations: "Organizations", extensions: "Extensions", health: "System Health", settings: "Settings",
   },
   shell: {
-    search: "Search pages…", tenant: "Northstar Group", workspace: "AI Platform", environment: "Development", rolePreview: "Preview role", documentation: "Documentation", architecture: "Architecture", theme: "Theme", currentUser: "Alex Chen", commandHint: "Type to filter navigation", menu: "Open navigation", collapse: "Collapse navigation", notifications: "Notifications", preview: "Product preview", primaryNavigation: "Primary navigation",
+    search: "Search pages…", environment: "Development", rolePreview: "Preview role", documentation: "Documentation", architecture: "Architecture", theme: "Theme", currentUser: "Alex Chen", accountMenu: "Open account menu", commandHint: "Type to filter navigation", menu: "Open navigation", collapse: "Collapse navigation", notifications: "Notifications", preview: "Product preview", primaryNavigation: "Primary navigation",
   },
   role: { SYSTEM_ADMIN: "System Admin", TENANT_ADMIN: "Organization Admin", AI_ADMIN: "AI Admin", DEVELOPER: "Developer", OPERATOR: "Operator", MEMBER: "Member" },
   dataMode: { live: "Live data", mixed: "Live + demo", demo: "Demo data" },
