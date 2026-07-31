@@ -1,7 +1,5 @@
 package io.apvero.platform.runtime.internal;
 
-import io.apvero.platform.application.AiApplication;
-import io.apvero.platform.application.ApplicationCatalog;
 import io.apvero.platform.release.ReleaseBundle;
 import io.apvero.platform.release.ReleaseCatalog;
 import io.apvero.platform.runtime.ExecuteRunCommand;
@@ -24,34 +22,38 @@ import java.util.UUID;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
 public class DefaultRunCatalog implements RunCatalog {
-    private final ApplicationCatalog applications;
     private final ReleaseCatalog releases;
     private final RuntimeProviderRegistry providers;
     private final RunRepository repository;
     private final ExecutionCapabilityPolicy governance;
     private final MeterRegistry metrics;
     private final ObjectMapper json;
+    private final GroundedRunOrchestrator grounded;
+    private final RuntimeReleaseCompatibility compatibility;
 
     public DefaultRunCatalog(
-            ApplicationCatalog applications,
             ReleaseCatalog releases,
             RuntimeProviderRegistry providers,
             RunRepository repository,
             ExecutionCapabilityPolicy governance,
             MeterRegistry metrics,
-            ObjectMapper json) {
-        this.applications = applications;
+            ObjectMapper json,
+            GroundedRunOrchestrator grounded,
+            RuntimeReleaseCompatibility compatibility) {
         this.releases = releases;
         this.providers = providers;
         this.repository = repository;
         this.governance = governance;
         this.metrics = metrics;
         this.json = json;
+        this.grounded = grounded;
+        this.compatibility = compatibility;
     }
 
     @Override
@@ -60,29 +62,37 @@ public class DefaultRunCatalog implements RunCatalog {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RunRecord execute(UUID workspaceId, UUID applicationId, ExecuteRunCommand command) {
-        AiApplication application = applications.get(workspaceId, applicationId);
-        ReleaseBundle release = releases.get(workspaceId, command.releaseId());
-        if (!release.applicationId().equals(application.id())) {
+        ReleaseBundle storedRelease = releases.get(workspaceId, command.releaseId());
+        if (!storedRelease.applicationId().equals(applicationId)) {
             throw new IllegalArgumentException("The release does not belong to the requested application.");
         }
-        if (release.purpose() == io.apvero.platform.release.ReleasePurpose.PREVIEW
-                && release.expiresAt() != null && release.expiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
+        if (storedRelease.purpose() == io.apvero.platform.release.ReleasePurpose.PREVIEW
+                && storedRelease.expiresAt() != null
+                && storedRelease.expiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             throw new IllegalArgumentException("The preview execution bundle has expired.");
         }
+        ReleaseBundle release = compatibility.forExecution(storedRelease);
         String traceId = UUID.randomUUID().toString().replace("-", "");
+        long started = System.nanoTime();
+        if ("1.1".equals(release.manifest().path("schemaVersion").stringValue(""))
+                && "RAG".equals(release.manifest().path("runtimeMode").stringValue(""))) {
+            RunRecord run = grounded.execute(
+                    release, command, traceId, started);
+            recordMetrics(run);
+            return run;
+        }
         String routeReference = release.manifest().path("modelRouteVersion").stringValue();
         ExecutionPermit permit = governance.admit(workspaceId, applicationId, routeReference,
                 command.actorId(), traceId, command.input());
         JsonNode storedInput = retained(command.input(), permit);
-        long started = System.nanoTime();
         RuntimeProvider provider = null;
         try {
             provider = providers.resolve(release);
             ProviderResult result = provider.execute(new ProviderRequest(release, command.input(), traceId));
             long latencyMs = Math.max(0, (System.nanoTime() - started) / 1_000_000);
-            RunRecord run = repository.insert(application, release, provider.id(), command.actorId(), permit,
+            RunRecord run = repository.insert(release, provider.id(), command.actorId(), permit,
                     storedInput, retained(result.output(), permit), result, latencyMs, traceId);
             governance.settle(permit.reservationId(), result.costMicros(), true);
             recordMetrics(run);
@@ -90,8 +100,12 @@ public class DefaultRunCatalog implements RunCatalog {
         } catch (RuntimeException exception) {
             long latencyMs = Math.max(0, (System.nanoTime() - started) / 1_000_000);
             String category = exception instanceof IllegalArgumentException ? "INVALID_CONFIGURATION" : "PROVIDER_FAILURE";
-            RunRecord run = repository.insertFailure(application, release, provider == null ? "unresolved" : provider.id(),
-                    command.actorId(), permit, storedInput, latencyMs, traceId, category, "Provider execution failed.");
+            String failureCode = exception instanceof IllegalArgumentException
+                    ? "APVERO_RUNTIME_CONFIGURATION_INVALID"
+                    : "APVERO_RUNTIME_PROVIDER_FAILURE";
+            RunRecord run = repository.insertFailure(release, provider == null ? "unresolved" : provider.id(),
+                    command.actorId(), permit, storedInput, latencyMs, traceId, failureCode, category,
+                    "Provider execution failed.");
             governance.settle(permit.reservationId(), 0, false);
             recordMetrics(run);
             return run;

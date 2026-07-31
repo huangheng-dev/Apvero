@@ -8,6 +8,8 @@ import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.KnowledgeRetrieval;
 import io.apvero.platform.knowledge.KnowledgeRetrievalHit;
 import io.apvero.platform.knowledge.KnowledgeRetrievalResult;
+import io.apvero.platform.knowledge.KnowledgeRuntimeRetrieval;
+import io.apvero.platform.knowledge.KnowledgeRuntimeRetrievalResult;
 import io.apvero.platform.knowledge.KnowledgeSource;
 import io.apvero.platform.knowledge.RetrievalPolicyOverlapHandling;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.ExactRetrievalCandidate;
@@ -20,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 
 @Service
-final class DefaultKnowledgeRetrieval implements KnowledgeRetrieval {
+final class DefaultKnowledgeRetrieval implements KnowledgeRetrieval, KnowledgeRuntimeRetrieval {
     private static final String NO_EVIDENCE = "NO_EVIDENCE";
 
     private final GovernedKnowledgeRetrievalExecutor executor;
@@ -41,6 +43,17 @@ final class DefaultKnowledgeRetrieval implements KnowledgeRetrieval {
 
     @Override
     public KnowledgeRetrievalResult retrieve(
+            UUID workspaceId,
+            KnowledgeCommandContext context,
+            UUID indexVersionId,
+            UUID retrievalPolicyVersionId,
+            String query) {
+        return retrieveForRun(
+                workspaceId, context, indexVersionId, retrievalPolicyVersionId, query).retrieval();
+    }
+
+    @Override
+    public KnowledgeRuntimeRetrievalResult retrieveForRun(
             UUID workspaceId,
             KnowledgeCommandContext context,
             UUID indexVersionId,
@@ -77,7 +90,11 @@ final class DefaultKnowledgeRetrieval implements KnowledgeRetrieval {
                     execution.providerLatencyMillis(),
                     execution.rankedCandidates().size(),
                     hits);
-            return result;
+            return new KnowledgeRuntimeRetrievalResult(
+                    result,
+                    retention.version(),
+                    retention.retainPayloads(),
+                    retention.maskSensitiveFields());
         } catch (RuntimeException failure) {
             telemetry.failed(failure, Math.max(0, System.nanoTime() - startedAt));
             throw failure;

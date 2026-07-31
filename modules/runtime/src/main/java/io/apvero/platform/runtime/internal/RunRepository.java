@@ -1,7 +1,7 @@
 package io.apvero.platform.runtime.internal;
 
-import io.apvero.platform.application.AiApplication;
 import io.apvero.platform.release.ReleaseBundle;
+import io.apvero.platform.capability.ChatExecutionPermit;
 import io.apvero.platform.runtime.ProviderResult;
 import io.apvero.platform.runtime.RunRecord;
 import io.apvero.platform.runtime.UsageSummary;
@@ -14,7 +14,6 @@ interface RunRepository {
     List<RunRecord> findAll(UUID workspaceId);
 
     RunRecord insert(
-            AiApplication application,
             ReleaseBundle release,
             String providerId,
             String actorId,
@@ -26,7 +25,6 @@ interface RunRepository {
             String traceId);
 
     RunRecord insertFailure(
-            AiApplication application,
             ReleaseBundle release,
             String providerId,
             String actorId,
@@ -34,6 +32,45 @@ interface RunRepository {
             tools.jackson.databind.JsonNode input,
             long latencyMs,
             String traceId,
+            String failureCode,
+            String failureCategory,
+            String failureMessage);
+
+    RunRecord insertRunning(
+            ReleaseBundle release,
+            UUID modelRouteId,
+            String actorId,
+            tools.jackson.databind.JsonNode input,
+            String traceId);
+
+    RunRecord attachChat(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            ChatExecutionPermit permit);
+
+    RunRecord completeSuccess(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            tools.jackson.databind.JsonNode output,
+            ProviderResult result,
+            long latencyMs);
+
+    RunRecord completeNoEvidence(
+            UUID workspaceId,
+            UUID runId,
+            tools.jackson.databind.JsonNode output,
+            long latencyMs);
+
+    RunRecord completeFailure(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            tools.jackson.databind.JsonNode output,
+            ProviderResult result,
+            long latencyMs,
+            String failureCode,
             String failureCategory,
             String failureMessage);
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.apvero.platform.knowledge.KnowledgeDisabledException;
 import io.apvero.platform.knowledge.KnowledgeException;
+import io.apvero.platform.runtime.RunEvidenceException;
 import org.junit.jupiter.api.Test;
 
 class PlatformExceptionHandlerTest {
@@ -35,5 +36,15 @@ class PlatformExceptionHandlerTest {
         assertThat(detail.getDetail()).isEqualTo("APVERO_KNOWLEDGE_CONTENT_TOO_LARGE");
         assertThat(detail.getProperties())
                 .containsEntry("code", "APVERO_KNOWLEDGE_CONTENT_TOO_LARGE");
+    }
+
+    @Test
+    void mapsScopedRunEvidenceAbsenceWithoutLeakingBackendText() {
+        var detail = new PlatformExceptionHandler().runEvidenceProblem(new RunEvidenceException(
+                "APVERO_RUNTIME_RUN_NOT_FOUND", RunEvidenceException.Category.NOT_FOUND));
+
+        assertThat(detail.getStatus()).isEqualTo(404);
+        assertThat(detail.getDetail()).isEqualTo("APVERO_RUNTIME_RUN_NOT_FOUND");
+        assertThat(detail.getProperties()).containsEntry("code", "APVERO_RUNTIME_RUN_NOT_FOUND");
     }
 }

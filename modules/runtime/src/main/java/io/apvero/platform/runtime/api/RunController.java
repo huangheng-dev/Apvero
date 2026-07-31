@@ -3,7 +3,11 @@ package io.apvero.platform.runtime.api;
 import tools.jackson.databind.JsonNode;
 import io.apvero.platform.runtime.ExecuteRunCommand;
 import io.apvero.platform.runtime.RunCatalog;
+import io.apvero.platform.runtime.RunCitation;
+import io.apvero.platform.runtime.RunCitationCatalog;
 import io.apvero.platform.runtime.RunRecord;
+import io.apvero.platform.runtime.RunRetrievalEvidence;
+import io.apvero.platform.runtime.RunRetrievalEvidenceCatalog;
 import io.apvero.platform.runtime.UsageSummary;
 import io.apvero.platform.release.ReleaseCatalog;
 import jakarta.validation.Valid;
@@ -25,10 +29,18 @@ import org.springframework.web.bind.annotation.RestController;
 final class RunController {
     private final RunCatalog runs;
     private final ReleaseCatalog releases;
+    private final RunRetrievalEvidenceCatalog retrievalEvidence;
+    private final RunCitationCatalog citations;
 
-    RunController(RunCatalog runs, ReleaseCatalog releases) {
+    RunController(
+            RunCatalog runs,
+            ReleaseCatalog releases,
+            RunRetrievalEvidenceCatalog retrievalEvidence,
+            RunCitationCatalog citations) {
         this.runs = runs;
         this.releases = releases;
+        this.retrievalEvidence = retrievalEvidence;
+        this.citations = citations;
     }
 
     @GetMapping("/runs")
@@ -62,6 +74,20 @@ final class RunController {
     @GetMapping("/usage")
     UsageSummary usage(@RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId) {
         return runs.usage(workspaceId);
+    }
+
+    @GetMapping("/runs/{runId}/retrieval")
+    RunRetrievalEvidence retrieval(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID runId) {
+        return retrievalEvidence.get(workspaceId, runId);
+    }
+
+    @GetMapping("/runs/{runId}/citations")
+    List<RunCitation> citations(
+            @RequestHeader("X-Apvero-Workspace-Id") UUID workspaceId,
+            @PathVariable UUID runId) {
+        return citations.list(workspaceId, runId);
     }
 
     record ExecuteRunRequest(@NotNull UUID releaseId, @NotNull JsonNode input) {}

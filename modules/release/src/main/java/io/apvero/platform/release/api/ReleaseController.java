@@ -1,6 +1,5 @@
 package io.apvero.platform.release.api;
 
-import tools.jackson.databind.JsonNode;
 import io.apvero.platform.release.CreateReleaseCommand;
 import io.apvero.platform.release.ReleaseBundle;
 import io.apvero.platform.release.ReleaseCatalog;
@@ -42,13 +41,12 @@ final class ReleaseController {
             @PathVariable UUID applicationId,
             @Valid @RequestBody CreateReleaseRequest request) {
         ReleaseBundle release = releases.create(
-                workspaceId, applicationId, new CreateReleaseCommand(request.version(), request.manifest()));
+                workspaceId, applicationId, new CreateReleaseCommand(request.version()));
         return ResponseEntity.created(URI.create("/api/v1/releases/" + release.id())).body(release);
     }
 
     record CreateReleaseRequest(
             @NotBlank @Size(max = 64)
                     @Pattern(regexp = "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$", message = "must be a semantic version")
-                    String version,
-            JsonNode manifest) {}
+            String version) {}
 }

@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.1",
   "runtimeMode": "RAG",
-  "modelRouteVersion": "answer-route@1.2.0",
-  "promptVersion": "grounded-answer@2.1.0",
+  "modelRouteVersion": "answer-route@12",
+  "promptVersion": "grounded-answer@21",
   "outputSchemaVersion": "grounded-answer@1.0.0",
   "knowledgeBindings": [
     {

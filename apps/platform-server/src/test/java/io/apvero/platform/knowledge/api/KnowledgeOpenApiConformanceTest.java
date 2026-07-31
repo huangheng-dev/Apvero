@@ -28,6 +28,7 @@ class KnowledgeOpenApiConformanceTest {
             new Operation("get", "/api/v1/knowledge-index-builds/{buildId}"),
             new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/retry"),
             new Operation("post", "/api/v1/knowledge-index-builds/{buildId}/cancel"),
+            new Operation("get", "/api/v1/knowledge-index-versions"),
             new Operation("get", "/api/v1/retrieval-policy-versions"),
             new Operation("post", "/api/v1/retrieval-policy-versions"),
             new Operation("post", "/api/v1/knowledge-retrieval-tests"));
@@ -42,6 +43,7 @@ class KnowledgeOpenApiConformanceTest {
         for (Class<?> controller : Set.of(
                 KnowledgeController.class,
                 KnowledgeIndexBuildController.class,
+                KnowledgeIndexVersionController.class,
                 RetrievalPolicyVersionController.class,
                 KnowledgeRetrievalController.class)) {
             String basePath = controller.getAnnotation(RequestMapping.class).value()[0];

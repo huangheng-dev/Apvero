@@ -66,6 +66,46 @@ public class DefaultRetrievalPolicyVersionCatalog implements RetrievalPolicyVers
     }
 
     @Override
+    public RetrievalPolicyVersion get(UUID workspaceId, UUID policyVersionId) {
+        WorkspaceScope scope = scope(workspaceId);
+        if (policyVersionId == null) {
+            throw problem(
+                    "APVERO_KNOWLEDGE_IDENTIFIER_INVALID",
+                    KnowledgeException.Category.BAD_REQUEST);
+        }
+        return policies.findPolicy(scope, policyVersionId)
+                .map(DefaultRetrievalPolicyVersionCatalog::map)
+                .orElseThrow(() -> problem(
+                        "APVERO_KNOWLEDGE_RETRIEVAL_POLICY_VERSION_NOT_FOUND",
+                        KnowledgeException.Category.NOT_FOUND));
+    }
+
+    @Override
+    public RetrievalPolicyVersion getByReference(UUID workspaceId, String reference) {
+        WorkspaceScope scope = scope(workspaceId);
+        if (reference == null || reference.isBlank() || reference.length() > 145) {
+            throw problem(
+                    "APVERO_KNOWLEDGE_RETRIEVAL_POLICY_REFERENCE_INVALID",
+                    KnowledgeException.Category.BAD_REQUEST);
+        }
+        return policies.findPolicyByReference(scope, reference.trim())
+                .map(DefaultRetrievalPolicyVersionCatalog::map)
+                .orElseThrow(() -> problem(
+                        "APVERO_KNOWLEDGE_RETRIEVAL_POLICY_VERSION_NOT_FOUND",
+                        KnowledgeException.Category.NOT_FOUND));
+    }
+
+    @Override
+    public boolean supportsExecution(RetrievalPolicyVersion policy) {
+        return policy != null
+                && RETRIEVAL_ALGORITHM_VERSION.equals(policy.retrievalAlgorithmVersion())
+                && TOKEN_ESTIMATOR_VERSION.equals(policy.tokenEstimatorVersion())
+                && policy.retentionPolicyVersionAtPublish() >= 1
+                && NO_EVIDENCE.equals(policy.emptyEvidenceBehavior())
+                && TOKEN_ESTIMATOR_IMPLEMENTATION_VERSION.equals(tokenEstimator.algorithmVersion());
+    }
+
+    @Override
     @Transactional
     public RetrievalPolicyVersion publish(
             UUID workspaceId,

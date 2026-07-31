@@ -36,7 +36,6 @@ import org.springframework.dao.DataAccessException;
 class P1GovernanceIntegrationTest {
     private static final String WORKSPACE = "00000000-0000-0000-0000-000000000101";
     private static final String APP_ONE = "00000000-0000-0000-0000-000000001001";
-    private static final String APP_TWO = "00000000-0000-0000-0000-000000001002";
     private static final String APP_THREE = "00000000-0000-0000-0000-000000001003";
     private static final String AUTHORIZATION = "Authorization";
     private static final String ADMIN = "Bearer p1-test-bootstrap";
@@ -123,15 +122,18 @@ class P1GovernanceIntegrationTest {
 
         sql.update("update model_definition set output_cost_micros_per_million = 1000000 where id = ?::uuid",
                 "00000000-0000-0000-0000-000000003101");
+        UUID budgetDeniedApplication =
+                UUID.fromString(APP_THREE);
         mvc.perform(post("/api/v1/budget-policies")
                         .header(AUTHORIZATION, ADMIN)
                         .header("X-Apvero-Workspace-Id", WORKSPACE)
                         .contentType("application/json")
-                        .content("{\"name\":\"deny app two\",\"scopeType\":\"APPLICATION\",\"scopeId\":\"" + APP_TWO + "\",\"monthlyCostLimitMicros\":0}"))
+                        .content("{\"name\":\"deny structured app\",\"scopeType\":\"APPLICATION\",\"scopeId\":\""
+                                + budgetDeniedApplication + "\",\"monthlyCostLimitMicros\":0}"))
                 .andExpect(status().isCreated());
         Integer before = sql.queryForObject("select count(*) from execution_reservation where application_id = ?::uuid",
-                Integer.class, APP_TWO);
-        mvc.perform(post("/api/v1/applications/{id}/preview-runs", APP_TWO)
+                Integer.class, budgetDeniedApplication);
+        mvc.perform(post("/api/v1/applications/{id}/preview-runs", budgetDeniedApplication)
                         .header(AUTHORIZATION, ADMIN)
                         .header("X-Apvero-Workspace-Id", WORKSPACE)
                         .contentType("application/json")
@@ -139,22 +141,22 @@ class P1GovernanceIntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("APVERO_BUDGET_EXCEEDED"));
         Integer after = sql.queryForObject("select count(*) from execution_reservation where application_id = ?::uuid",
-                Integer.class, APP_TWO);
+                Integer.class, budgetDeniedApplication);
         assertThat(after).isEqualTo(before);
 
         mvc.perform(post("/api/v1/budget-policies")
                         .header(AUTHORIZATION, ADMIN)
                         .header("X-Apvero-Workspace-Id", WORKSPACE)
                         .contentType("application/json")
-                        .content("{\"name\":\"rate app three\",\"scopeType\":\"APPLICATION\",\"scopeId\":\"" + APP_THREE + "\",\"requestsPerMinute\":1}"))
+                        .content("{\"name\":\"rate app one\",\"scopeType\":\"APPLICATION\",\"scopeId\":\"" + APP_ONE + "\",\"requestsPerMinute\":1}"))
                 .andExpect(status().isCreated());
-        mvc.perform(post("/api/v1/applications/{id}/preview-runs", APP_THREE)
+        mvc.perform(post("/api/v1/applications/{id}/preview-runs", APP_ONE)
                         .header(AUTHORIZATION, ADMIN)
                         .header("X-Apvero-Workspace-Id", WORKSPACE)
                         .contentType("application/json")
                         .content("{\"input\":{\"message\":\"first request\"}}"))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/v1/applications/{id}/preview-runs", APP_THREE)
+        mvc.perform(post("/api/v1/applications/{id}/preview-runs", APP_ONE)
                         .header(AUTHORIZATION, ADMIN)
                         .header("X-Apvero-Workspace-Id", WORKSPACE)
                         .contentType("application/json")
@@ -188,7 +190,24 @@ class P1GovernanceIntegrationTest {
         assertThat(governance.purgeAuditBefore(UUID.fromString(WORKSPACE),
                 OffsetDateTime.now(ZoneOffset.UTC).minusDays(365))).isEqualTo(1);
 
-        sql.update("update ai_run set created_at = now() - interval '40 days' where id = ?::uuid",
+        UUID oldRunId = UUID.randomUUID();
+        sql.update("""
+                insert into ai_run(
+                    id, tenant_id, workspace_id, application_id, release_bundle_id,
+                    model_route_id, status, provider_id, actor_id,
+                    governance_reservation_id, input, output, latency_ms,
+                    prompt_tokens, completion_tokens, cost_micros, trace_id,
+                    failure_code, failure_category, failure_message, created_at)
+                select ?, tenant_id, workspace_id, application_id, release_bundle_id,
+                    model_route_id, status, provider_id, actor_id,
+                    null, input, output, latency_ms,
+                    prompt_tokens, completion_tokens, cost_micros, ?,
+                    failure_code, failure_category, failure_message,
+                    now() - interval '40 days'
+                from ai_run where id = ?::uuid
+                """,
+                oldRunId,
+                "p1-retention-" + oldRunId,
                 "10000000-0000-0000-0000-000000000001");
         assertThat(runs.purgeBefore(UUID.fromString(WORKSPACE),
                 OffsetDateTime.now(ZoneOffset.UTC).minusDays(30))).isEqualTo(1);

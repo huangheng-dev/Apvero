@@ -3,7 +3,7 @@
   "$id": "https://schemas.apvero.dev/grounded-answer/1.0.0",
   "title": "Apvero Grounded Answer 1.0",
   "description": "Structured RAG result with citations validated against the retained retrieval evidence for one Run.",
-  "x-apvero-contract-status": "contract-only",
+  "x-apvero-contract-status": "baseline",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "status", "answer", "citations"],

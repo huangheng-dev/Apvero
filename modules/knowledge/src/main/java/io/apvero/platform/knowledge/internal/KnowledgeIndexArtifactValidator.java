@@ -216,8 +216,10 @@ final class KnowledgeIndexArtifactValidator {
         if (!Objects.equals(sourceRevision.sourceId(), buildRevision.sourceId())
                 || !Objects.equals(sourceRevision.id(), buildRevision.sourceRevisionId())
                 || !Objects.equals(sourceRevision.contentDigest(), buildRevision.sourceContentDigest())
-                || !Objects.equals(sourceRevision.parserVersion(), buildRevision.parserVersion())
-                || !Objects.equals(sourceRevision.chunkerVersion(), buildRevision.chunkerVersion())
+                || (sourceRevision.parserVersion() != null
+                        && !Objects.equals(sourceRevision.parserVersion(), buildRevision.parserVersion()))
+                || (sourceRevision.chunkerVersion() != null
+                        && !Objects.equals(sourceRevision.chunkerVersion(), buildRevision.chunkerVersion()))
                 || sourceRevision.snapshotStatus() != SnapshotStatus.SNAPSHOTTED) {
             throw integrity("APVERO_KNOWLEDGE_ARTIFACT_SOURCE_MEMBERSHIP_INVALID");
         }

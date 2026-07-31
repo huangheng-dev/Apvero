@@ -18,10 +18,13 @@ PRIMARY_WORKSPACE = "00000000-0000-0000-0000-000000000101"
 SECONDARY_WORKSPACE = "00000000-0000-0000-0000-000000000102"
 PRIMARY_INDEX = "00000000-0000-0000-0000-000000006001"
 SECONDARY_INDEX = "00000000-0000-0000-0000-000000007002"
-PRIMARY_REVISION = "00000000-0000-0000-0000-000000005301"
+PRIMARY_FIXTURE_REVISION = "00000000-0000-0000-0000-000000005301"
 SECONDARY_REVISION = "00000000-0000-0000-0000-000000006302"
 PRIMARY_ROUTE = "00000000-0000-0000-0000-000000005901"
 SECONDARY_ROUTE = "00000000-0000-0000-0000-000000006902"
+PRIMARY_CHAT_ROUTE = "00000000-0000-0000-0000-000000003201"
+PRIMARY_PROMPT_VERSION = "00000000-0000-0000-0000-000000004101"
+PRIMARY_BASE = "00000000-0000-0000-0000-000000005101"
 FIXTURE_PATH = Path(__file__).with_name("p2-2d-5-fixtures.sql")
 REPOSITORY_ROOT = Path(__file__).parents[2]
 
@@ -145,6 +148,51 @@ def psql(*, sql: str | None = None, file: Path | None = None) -> str:
     return completed.stdout.strip()
 
 
+def upload_text_source() -> dict:
+    boundary = f"apvero-{uuid4().hex}"
+    content = b"alpha evidence uploaded through the public API"
+    payload = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="name"\r\n\r\n'
+        "P2.3 uploaded evidence\r\n"
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="p2-3-evidence.txt"\r\n'
+        "Content-Type: text/plain\r\n\r\n"
+    ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "X-Apvero-Workspace-Id": PRIMARY_WORKSPACE,
+        "X-Request-Id": str(uuid4()),
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+    call = urllib.request.Request(
+        API_ORIGIN + f"/api/v1/knowledge-bases/{PRIMARY_BASE}/source-uploads",
+        data=payload,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(call, timeout=15) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        body = error.read()
+        problem = json.loads(body) if body else {}
+        raise ApiFailure(error.code, problem) from error
+
+
+def wait_ingestion(job_id: str, *, timeout: float = 90) -> dict:
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = request(f"/api/v1/knowledge-ingestion-jobs/{job_id}")
+        if last["status"] == "READY":
+            return last
+        if last["status"] in {"FAILED", "CANCELLED"}:
+            raise AssertionError(f"Ingestion terminated unexpectedly: {last}")
+        time.sleep(0.2)
+    raise AssertionError(f"Ingestion did not become READY: {last}")
+
+
 def create_build(
     workspace: str,
     index_id: str,
@@ -218,12 +266,16 @@ def assert_not_found(callable_request) -> None:
 
 def bootstrap_disabled() -> None:
     psql(file=FIXTURE_PATH)
+    upload = upload_text_source()
+    ingestion = wait_ingestion(upload["job"]["id"])
+    assert ingestion["currentStep"] == "COMPLETE", ingestion
+    uploaded_revision = upload["revision"]["id"]
     primary = create_build(
         PRIMARY_WORKSPACE,
         PRIMARY_INDEX,
         "1.0.0",
         PRIMARY_ROUTE,
-        PRIMARY_REVISION,
+        uploaded_revision,
     )
     secondary = create_build(
         SECONDARY_WORKSPACE,
@@ -245,6 +297,8 @@ def bootstrap_disabled() -> None:
         json.dumps(
             {
                 "disabledBuilds": [primary["id"], secondary["id"]],
+                "uploadedSource": upload["source"]["id"],
+                "uploadedRevision": uploaded_revision,
                 "health": health["details"],
             },
             sort_keys=True,
@@ -264,7 +318,7 @@ def verify_ready() -> None:
         PRIMARY_INDEX,
         "1.0.0",
         PRIMARY_ROUTE,
-        PRIMARY_REVISION,
+        build_revision(primary["id"]),
     )
     assert replay["id"] == primary["id"]
 
@@ -277,6 +331,7 @@ def verify_ready() -> None:
         )
     )
 
+    closure = verify_cited_run_closure(primary)
     persisted = psql(
         sql=f"""
         select concat(
@@ -289,11 +344,21 @@ def verify_ready() -> None:
             (select count(*) from audit_event
              where workspace_id = '{PRIMARY_WORKSPACE}'::uuid
                and action = 'knowledge.index-version.published'
-               and resource_id = '{primary["publishedVersionId"]}')
+               and resource_id = '{primary["publishedVersionId"]}'),
+            ':',
+            (select count(*)
+             from ai_run_retrieval_hit hit
+             join ai_run_retrieval retrieval on retrieval.id = hit.retrieval_id
+             where retrieval.run_id = '{closure["runId"]}'::uuid
+               and hit.source_revision_id = (
+                   select source_revision_id
+                   from knowledge_index_build_revision
+                   where knowledge_index_build_id = '{primary["id"]}'::uuid
+               ))
         )
         """
     )
-    assert persisted == "1:1:1", persisted
+    assert persisted == "1:1:1:1", persisted
     verify_operational_signals()
     print(
         json.dumps(
@@ -302,11 +367,152 @@ def verify_ready() -> None:
                 "primaryVersion": primary["publishedVersionId"],
                 "secondaryBuild": secondary["id"],
                 "secondaryVersion": secondary["publishedVersionId"],
+                "citedRunClosure": closure,
                 "persisted": persisted,
             },
             sort_keys=True,
         )
     )
+
+
+def verify_cited_run_closure(primary_build: dict) -> dict:
+    versions = request(
+        f"/api/v1/knowledge-index-versions?indexId={PRIMARY_INDEX}",
+    )
+    matching_versions = [
+        version
+        for version in versions
+        if version["id"] == primary_build["publishedVersionId"]
+    ]
+    assert len(matching_versions) == 1, matching_versions
+    index_version = matching_versions[0]
+
+    current_retention = request("/api/v1/retention-policy")
+    retention = request(
+        "/api/v1/retention-policy",
+        method="PUT",
+        body={
+            "runRetentionDays": current_retention["runRetentionDays"],
+            "auditRetentionDays": current_retention["auditRetentionDays"],
+            "retainPayloads": True,
+            "maskSensitiveFields": False,
+        },
+    )
+    assert retention["retainPayloads"] is True, retention
+    assert retention["maskSensitiveFields"] is False, retention
+
+    suffix = uuid4().hex[:12]
+    policy_request = {
+        "slug": f"p2-3-compose-{suffix}",
+        "version": "1.0.0",
+        "topK": 4,
+        "maxContextTokens": 1024,
+        "minimumScore": 0,
+        "overlapHandling": "KEEP",
+    }
+    matching_policies = [
+        policy
+        for policy in request("/api/v1/retrieval-policy-versions")
+        if policy["topK"] == policy_request["topK"]
+        and policy["maxContextTokens"] == policy_request["maxContextTokens"]
+        and float(policy["minimumScore"]) == policy_request["minimumScore"]
+        and policy["overlapHandling"] == policy_request["overlapHandling"]
+    ]
+    policy = (
+        matching_policies[0]
+        if matching_policies
+        else request(
+            "/api/v1/retrieval-policy-versions",
+            method="POST",
+            body=policy_request,
+        )
+    )
+    application = request(
+        "/api/v1/applications",
+        method="POST",
+        body={
+            "slug": f"p2-3-compose-{suffix}",
+            "name": "P2.3 Compose cited Run",
+            "description": "Offline deterministic P2.3 acceptance workflow.",
+            "runtimeMode": "RAG",
+        },
+    )
+    application = request(
+        f"/api/v1/applications/{application['id']}/draft",
+        method="PATCH",
+        body={
+            "modelRouteId": PRIMARY_CHAT_ROUTE,
+            "promptVersionId": PRIMARY_PROMPT_VERSION,
+        },
+    )
+    bindings = request(
+        f"/api/v1/applications/{application['id']}/draft/knowledge-bindings",
+        method="PUT",
+        body={
+            "expectedApplicationVersion": application["version"],
+            "bindings": [
+                {
+                    "indexVersionId": index_version["id"],
+                    "retrievalPolicyVersionId": policy["id"],
+                }
+            ],
+        },
+    )
+    assert bindings["bindings"][0]["bindingOrder"] == 0, bindings
+
+    release = request(
+        f"/api/v1/applications/{application['id']}/releases",
+        method="POST",
+        body={"version": "1.0.0"},
+    )
+    assert release["manifest"]["schemaVersion"] == "1.1", release
+    assert release["manifest"]["runtimeMode"] == "RAG", release
+    assert release["manifest"]["knowledgeBindings"] == [
+        {
+            "indexVersion": index_version["reference"],
+            "retrievalPolicyVersion": policy["reference"],
+        }
+    ], release
+
+    run = request(
+        f"/api/v1/applications/{application['id']}/runs",
+        method="POST",
+        body={
+            "releaseId": release["id"],
+            "input": {"message": "alpha evidence uploaded through the public API"},
+        },
+        timeout=30,
+    )
+    assert run["status"] == "SUCCEEDED", run
+    assert run["releaseBundleId"] == release["id"], run
+    assert run["output"]["schemaVersion"] == "1.0", run
+    assert run["output"]["status"] == "GROUNDED", run
+    assert run["output"]["citations"][0]["marker"] == "[K1]", run
+
+    evidence = request(f"/api/v1/runs/{run['id']}/retrieval")
+    citations = request(f"/api/v1/runs/{run['id']}/citations")
+    assert len(evidence["retrievals"]) == 1, evidence
+    assert evidence["retrievals"][0]["indexVersionId"] == index_version["id"], evidence
+    assert evidence["retrievals"][0]["hits"][0]["marker"] == "[K1]", evidence
+    assert len(citations) == 1, citations
+    assert citations[0]["marker"] == "[K1]", citations
+    assert citations[0]["contentDigest"] == evidence["retrievals"][0]["hits"][0]["contentDigest"]
+    assert citations[0]["sourceRevisionId"] == evidence["retrievals"][0]["hits"][0]["sourceRevisionId"]
+    assert_not_found(
+        lambda: request(
+            f"/api/v1/runs/{run['id']}/citations",
+            workspace=SECONDARY_WORKSPACE,
+        )
+    )
+    return {
+        "applicationId": application["id"],
+        "releaseId": release["id"],
+        "runId": run["id"],
+        "indexVersionId": index_version["id"],
+        "retrievalPolicyVersionId": policy["id"],
+        "citationMarker": citations[0]["marker"],
+        "sourceRevisionId": citations[0]["sourceRevisionId"],
+    }
 
 
 def verify_operational_signals() -> None:
@@ -343,7 +549,7 @@ def verify_operational_signals() -> None:
         SECONDARY_WORKSPACE,
         PRIMARY_INDEX,
         SECONDARY_INDEX,
-        PRIMARY_REVISION,
+        PRIMARY_FIXTURE_REVISION,
         SECONDARY_REVISION,
         "alpha evidence",
         "beta evidence",
@@ -359,7 +565,7 @@ def create_recovery() -> None:
         PRIMARY_INDEX,
         "1.0.1",
         PRIMARY_ROUTE,
-        PRIMARY_REVISION,
+        PRIMARY_FIXTURE_REVISION,
     )
     recovery = get_build(PRIMARY_WORKSPACE, recovery["id"])
     assert (recovery["status"], recovery["attemptCount"]) == ("QUEUED", 0)
@@ -408,6 +614,18 @@ def find_build_in_database(version: str) -> str:
     )
     assert build_id, version
     return build_id
+
+
+def build_revision(build_id: str) -> str:
+    revision_id = psql(
+        sql=f"""
+        select source_revision_id
+        from knowledge_index_build_revision
+        where knowledge_index_build_id = '{build_id}'::uuid
+        """
+    )
+    assert revision_id, build_id
+    return revision_id
 
 
 def verify_recovery() -> None:
