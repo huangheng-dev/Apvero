@@ -1,5 +1,5 @@
 export const en = {
-  brand: { subtitle: "AI Application Engineering Platform", home: "Apvero home" },
+  brand: { home: "Apvero home" },
   nav: {
     overview: "Overview", build: "Build", operate: "Operate", govern: "Govern", organization: "Organization", system: "System",
     applications: "Applications", models: "Models", prompts: "Prompts", knowledge: "Knowledge", capabilities: "Tools & MCP", evaluations: "Evaluations", playground: "Playground",
