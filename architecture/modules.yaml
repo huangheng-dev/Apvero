@@ -11,11 +11,11 @@ modules:
 
   - id: application
     status: baseline
-    implementedOwns: [ai-application, runtime-mode, lifecycle-metadata]
-    plannedOwns: [versioned-application-draft, input-contract, output-contract, knowledge-draft-binding]
+    implementedOwns: [ai-application, runtime-mode, lifecycle-metadata, knowledge-draft-binding]
+    plannedOwns: [versioned-application-draft, input-contract, output-contract]
     publicApi: io.apvero.platform.application
-    databaseTables: [ai_application]
-    plannedDatabaseTables: [application_draft_knowledge_binding]
+    databaseTables: [ai_application, application_draft_knowledge_binding]
+    plannedDatabaseTables: []
 
   - id: capability-registry
     status: baseline
@@ -26,18 +26,18 @@ modules:
 
   - id: release
     status: baseline
-    implementedOwns: [immutable-release-bundle, canonical-artifact-digest]
-    plannedOwns: [release-bundle-manifest-1.1, immutable-knowledge-binding, release-gate, environment-promotion]
+    implementedOwns: [immutable-release-bundle, canonical-artifact-digest, release-bundle-manifest-1.1, immutable-knowledge-binding]
+    plannedOwns: [release-gate, environment-promotion]
     publicApi: io.apvero.platform.release
     databaseTables: [release_bundle]
 
   - id: runtime
     status: baseline
-    implementedOwns: [run-ledger, trace-identity, actor-identity, governance-reservation-link, token-usage, cost, runtime-metrics, runtime-provider-port]
-    plannedOwns: [retrieval-evidence, grounded-answer, citation-validation, normalized-trace-spans, streaming, provider-routing]
+    implementedOwns: [run-ledger, retrieval-evidence, grounded-orchestration, grounded-answer, citation-validation, trace-identity, actor-identity, governance-reservation-link, token-usage, cost, runtime-metrics, runtime-provider-port]
+    plannedOwns: [normalized-trace-spans, streaming, provider-routing]
     publicApi: io.apvero.platform.runtime
-    databaseTables: [ai_run]
-    plannedDatabaseTables: [ai_run_retrieval, ai_run_retrieval_hit]
+    databaseTables: [ai_run, ai_run_retrieval, ai_run_retrieval_hit]
+    plannedDatabaseTables: []
 
   - id: knowledge
     status: in-progress

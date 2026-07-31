@@ -74,6 +74,7 @@ jobs:
         with:
           node-version: "24"
       - run: node -e "for (const f of require('fs').globSync('contracts/**/*.json')) JSON.parse(require('fs').readFileSync(f, 'utf8'));"
+      - run: npx --yes ajv-cli@5.0.0 validate --spec=draft2020 --strict=false -s contracts/schemas/release-bundle-manifest.v1.1.schema.json -d contracts/examples/release-bundle-manifest.v1.1.rag.json
       - run: npx --yes @redocly/cli@2.13.0 lint contracts/openapi/platform-api.yaml contracts/openapi/ai-worker-internal.v1.yaml
 
   compose-config:
@@ -195,7 +196,7 @@ jobs:
           "${compose[@]}" start ai-worker
           "${compose[@]}" up -d --wait --wait-timeout 120 postgres ai-worker platform-server
           uv run --project apps/ai-worker python deploy/compose/verify_knowledge.py wait-job "$job_id" READY
-      - name: Verify disabled, automatic Build and crash recovery paths
+      - name: Verify upload-to-citation closure, automatic Build and crash recovery
         shell: bash
         run: |
           compose=(docker compose --profile knowledge -f deploy/compose/compose.yaml -f deploy/compose/compose.knowledge.yaml)

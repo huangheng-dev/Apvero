@@ -77,6 +77,32 @@ class KnowledgeIndexArtifactValidatorTest {
     }
 
     @Test
+    void acceptsCapturedRevisionsWhoseProcessingVersionsAreOwnedByDocumentsAndChunks() {
+        KnowledgeIndexArtifactEvidence baseline = evidence(false);
+        List<SourceRevisionRow> capturedRevisions = baseline.sourceRevisions().stream()
+                .map(KnowledgeIndexArtifactValidatorTest::withoutProcessingVersions)
+                .toList();
+
+        KnowledgeIndexArtifactManifest manifest = validator.validate(new KnowledgeIndexArtifactEvidence(
+                baseline.scope(),
+                baseline.build(),
+                baseline.route(),
+                baseline.buildRevisions(),
+                capturedRevisions,
+                baseline.documents(),
+                baseline.chunks(),
+                baseline.entries()));
+
+        assertThat(manifest.sourceCount()).isEqualTo(2);
+        assertThat(manifest.sources())
+                .extracting(KnowledgeIndexArtifactManifest.SourceManifest::parserVersion)
+                .containsOnly("parser@1");
+        assertThat(manifest.sources())
+                .extracting(KnowledgeIndexArtifactManifest.SourceManifest::chunkerVersion)
+                .containsOnly("chunker@1");
+    }
+
+    @Test
     void manifestDigestsIgnoreDefaultLocaleAndTimeZone() {
         Locale originalLocale = Locale.getDefault();
         TimeZone originalTimeZone = TimeZone.getDefault();
@@ -140,6 +166,14 @@ class KnowledgeIndexArtifactValidatorTest {
                 second.createdAt());
         assertFailure(
                 withBuildRevisions(baseline, List.of(baseline.buildRevisions().getFirst(), duplicateOrdinal)),
+                "APVERO_KNOWLEDGE_ARTIFACT_SOURCE_MEMBERSHIP_INVALID");
+        assertFailure(
+                withSourceRevisions(baseline, List.of(
+                        withProcessingVersions(
+                                baseline.sourceRevisions().getFirst(),
+                                "other-parser@1",
+                                "chunker@1"),
+                        baseline.sourceRevisions().get(1))),
                 "APVERO_KNOWLEDGE_ARTIFACT_SOURCE_MEMBERSHIP_INVALID");
 
         ChunkRow firstChunk = baseline.chunks().getFirst();
@@ -276,6 +310,32 @@ class KnowledgeIndexArtifactValidatorTest {
                 "parser@1",
                 "chunker@1",
                 NOW);
+    }
+
+    private static SourceRevisionRow withoutProcessingVersions(SourceRevisionRow revision) {
+        return withProcessingVersions(revision, null, null);
+    }
+
+    private static SourceRevisionRow withProcessingVersions(
+            SourceRevisionRow revision,
+            String parserVersion,
+            String chunkerVersion) {
+        return new SourceRevisionRow(
+                revision.id(),
+                revision.tenantId(),
+                revision.workspaceId(),
+                revision.sourceId(),
+                revision.revision(),
+                revision.contentDigest(),
+                revision.mediaType(),
+                revision.byteSize(),
+                revision.originalFilename(),
+                revision.captureMetadataJson(),
+                revision.snapshotBytes(),
+                revision.snapshotStatus(),
+                parserVersion,
+                chunkerVersion,
+                revision.createdAt());
     }
 
     private static DocumentRow document(SourceFixture fixture) {
@@ -426,6 +486,20 @@ class KnowledgeIndexArtifactValidatorTest {
                 evidence.route(),
                 revisions,
                 evidence.sourceRevisions(),
+                evidence.documents(),
+                evidence.chunks(),
+                evidence.entries());
+    }
+
+    private static KnowledgeIndexArtifactEvidence withSourceRevisions(
+            KnowledgeIndexArtifactEvidence evidence,
+            List<SourceRevisionRow> revisions) {
+        return new KnowledgeIndexArtifactEvidence(
+                evidence.scope(),
+                evidence.build(),
+                evidence.route(),
+                evidence.buildRevisions(),
+                revisions,
                 evidence.documents(),
                 evidence.chunks(),
                 evidence.entries());

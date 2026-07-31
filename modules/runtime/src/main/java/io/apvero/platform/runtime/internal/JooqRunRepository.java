@@ -6,7 +6,7 @@ import static org.jooq.impl.DSL.table;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import io.apvero.platform.application.AiApplication;
+import io.apvero.platform.capability.ChatExecutionPermit;
 import io.apvero.platform.release.ReleaseBundle;
 import io.apvero.platform.runtime.ProviderResult;
 import io.apvero.platform.runtime.RunRecord;
@@ -45,6 +45,7 @@ public class JooqRunRepository implements RunRepository {
     private static final Field<Integer> COMPLETION_TOKENS = field("completion_tokens", Integer.class);
     private static final Field<Long> COST_MICROS = field("cost_micros", Long.class);
     private static final Field<String> TRACE_ID = field("trace_id", String.class);
+    private static final Field<String> FAILURE_CODE = field("failure_code", String.class);
     private static final Field<String> FAILURE_CATEGORY = field("failure_category", String.class);
     private static final Field<String> FAILURE_MESSAGE = field("failure_message", String.class);
     private static final Field<OffsetDateTime> CREATED_AT = field("created_at", OffsetDateTime.class);
@@ -62,7 +63,7 @@ public class JooqRunRepository implements RunRepository {
         return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
                         ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
-                        FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
+                        FAILURE_CODE, FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
                 .from(RUN)
                 .where(WORKSPACE_ID.eq(workspaceId))
                 .orderBy(CREATED_AT.desc())
@@ -72,7 +73,6 @@ public class JooqRunRepository implements RunRepository {
 
     @Override
     public RunRecord insert(
-            AiApplication application,
             ReleaseBundle release,
             String providerId,
             String actorId,
@@ -88,17 +88,16 @@ public class JooqRunRepository implements RunRepository {
                 .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
                         ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID, CREATED_AT)
-                .values(id, application.tenantId(), application.workspaceId(), application.id(), release.id(),
+                .values(id, release.tenantId(), release.workspaceId(), release.applicationId(), release.id(),
                         permit.modelRouteId(), RunStatus.SUCCEEDED.name(), providerId, actorId, permit.reservationId(),
                         JSONB.valueOf(input.toString()), JSONB.valueOf(output.toString()), latencyMs, result.promptTokens(),
                         result.completionTokens(), result.costMicros(), traceId, now)
                 .execute();
-        return findById(application.workspaceId(), id);
+        return findById(release.workspaceId(), id);
     }
 
     @Override
     public RunRecord insertFailure(
-            AiApplication application,
             ReleaseBundle release,
             String providerId,
             String actorId,
@@ -106,6 +105,7 @@ public class JooqRunRepository implements RunRepository {
             JsonNode input,
             long latencyMs,
             String traceId,
+            String failureCode,
             String failureCategory,
             String failureMessage) {
         UUID id = UUID.randomUUID();
@@ -114,13 +114,125 @@ public class JooqRunRepository implements RunRepository {
                 .columns(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
                         ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
-                        FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
-                .values(id, application.tenantId(), application.workspaceId(), application.id(), release.id(),
+                        FAILURE_CODE, FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
+                .values(id, release.tenantId(), release.workspaceId(), release.applicationId(), release.id(),
                         permit.modelRouteId(), RunStatus.FAILED.name(), providerId, actorId, permit.reservationId(),
                         JSONB.valueOf(input.toString()), JSONB.valueOf("{}"),
-                        latencyMs, 0, 0, 0L, traceId, failureCategory, failureMessage, now)
+                        latencyMs, 0, 0, 0L, traceId, failureCode, failureCategory, failureMessage, now)
                 .execute();
-        return findById(application.workspaceId(), id);
+        return findById(release.workspaceId(), id);
+    }
+
+    @Override
+    public RunRecord insertRunning(
+            ReleaseBundle release,
+            UUID modelRouteId,
+            String actorId,
+            JsonNode input,
+            String traceId) {
+        UUID id = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        sql.insertInto(RUN)
+                .columns(
+                        ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID,
+                        STATUS, PROVIDER_ID, ACTOR_ID, INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS,
+                        COMPLETION_TOKENS, COST_MICROS, TRACE_ID, CREATED_AT)
+                .values(
+                        id, release.tenantId(), release.workspaceId(), release.applicationId(), release.id(),
+                        modelRouteId, RunStatus.RUNNING.name(), "unresolved", actorId,
+                        JSONB.valueOf(input.toString()), JSONB.valueOf("{}"), 0L, 0, 0, 0L, traceId, now)
+                .execute();
+        return findById(release.workspaceId(), id);
+    }
+
+    @Override
+    public RunRecord attachChat(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            ChatExecutionPermit permit) {
+        int changed = sql.update(RUN)
+                .set(PROVIDER_ID, providerId)
+                .set(MODEL_ROUTE_ID, permit.modelRouteId())
+                .set(RESERVATION_ID, permit.reservationId())
+                .where(ID.eq(runId)
+                        .and(WORKSPACE_ID.eq(workspaceId))
+                        .and(STATUS.eq(RunStatus.RUNNING.name())))
+                .execute();
+        requireChanged(changed);
+        return findById(workspaceId, runId);
+    }
+
+    @Override
+    public RunRecord completeSuccess(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            JsonNode output,
+            ProviderResult result,
+            long latencyMs) {
+        int changed = sql.update(RUN)
+                .set(STATUS, RunStatus.SUCCEEDED.name())
+                .set(PROVIDER_ID, providerId)
+                .set(OUTPUT, JSONB.valueOf(output.toString()))
+                .set(LATENCY_MS, latencyMs)
+                .set(PROMPT_TOKENS, result.promptTokens())
+                .set(COMPLETION_TOKENS, result.completionTokens())
+                .set(COST_MICROS, result.costMicros())
+                .set(FAILURE_CODE, (String) null)
+                .set(FAILURE_CATEGORY, (String) null)
+                .set(FAILURE_MESSAGE, (String) null)
+                .where(ID.eq(runId)
+                        .and(WORKSPACE_ID.eq(workspaceId))
+                        .and(STATUS.eq(RunStatus.RUNNING.name())))
+                .execute();
+        requireChanged(changed);
+        return findById(workspaceId, runId);
+    }
+
+    @Override
+    public RunRecord completeNoEvidence(
+            UUID workspaceId,
+            UUID runId,
+            JsonNode output,
+            long latencyMs) {
+        return completeSuccess(
+                workspaceId,
+                runId,
+                "none",
+                output,
+                new ProviderResult(output, 0, 0, 0L),
+                latencyMs);
+    }
+
+    @Override
+    public RunRecord completeFailure(
+            UUID workspaceId,
+            UUID runId,
+            String providerId,
+            JsonNode output,
+            ProviderResult result,
+            long latencyMs,
+            String failureCode,
+            String failureCategory,
+            String failureMessage) {
+        int changed = sql.update(RUN)
+                .set(STATUS, RunStatus.FAILED.name())
+                .set(PROVIDER_ID, providerId)
+                .set(OUTPUT, JSONB.valueOf(output.toString()))
+                .set(LATENCY_MS, latencyMs)
+                .set(PROMPT_TOKENS, result.promptTokens())
+                .set(COMPLETION_TOKENS, result.completionTokens())
+                .set(COST_MICROS, result.costMicros())
+                .set(FAILURE_CODE, failureCode)
+                .set(FAILURE_CATEGORY, failureCategory)
+                .set(FAILURE_MESSAGE, failureMessage)
+                .where(ID.eq(runId)
+                        .and(WORKSPACE_ID.eq(workspaceId))
+                        .and(STATUS.eq(RunStatus.RUNNING.name())))
+                .execute();
+        requireChanged(changed);
+        return findById(workspaceId, runId);
     }
 
     @Override
@@ -146,6 +258,7 @@ public class JooqRunRepository implements RunRepository {
 
     @Override
     public int deleteBefore(UUID workspaceId, OffsetDateTime cutoff) {
+        sql.execute("set local apvero.retention_purge = 'on'");
         return sql.deleteFrom(RUN).where(WORKSPACE_ID.eq(workspaceId).and(CREATED_AT.lt(cutoff))).execute();
     }
 
@@ -153,11 +266,17 @@ public class JooqRunRepository implements RunRepository {
         return sql.select(ID, TENANT_ID, WORKSPACE_ID, APPLICATION_ID, RELEASE_ID, MODEL_ROUTE_ID, STATUS, PROVIDER_ID,
                         ACTOR_ID, RESERVATION_ID,
                         INPUT, OUTPUT, LATENCY_MS, PROMPT_TOKENS, COMPLETION_TOKENS, COST_MICROS, TRACE_ID,
-                        FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
+                        FAILURE_CODE, FAILURE_CATEGORY, FAILURE_MESSAGE, CREATED_AT)
                 .from(RUN)
                 .where(WORKSPACE_ID.eq(workspaceId).and(ID.eq(id)))
                 .fetchOptional(this::map)
                 .orElseThrow();
+    }
+
+    private static void requireChanged(int changed) {
+        if (changed != 1) {
+            throw new IllegalStateException("APVERO_RUNTIME_RUN_STATE_CONFLICT");
+        }
     }
 
     private RunRecord map(Record record) {
@@ -168,7 +287,7 @@ public class JooqRunRepository implements RunRepository {
                     record.get(PROVIDER_ID), record.get(ACTOR_ID), record.get(RESERVATION_ID),
                     json.readTree(record.get(INPUT).data()), json.readTree(record.get(OUTPUT).data()),
                     record.get(LATENCY_MS), record.get(PROMPT_TOKENS), record.get(COMPLETION_TOKENS),
-                    record.get(COST_MICROS), record.get(TRACE_ID), record.get(FAILURE_CATEGORY),
+                    record.get(COST_MICROS), record.get(TRACE_ID), record.get(FAILURE_CODE), record.get(FAILURE_CATEGORY),
                     record.get(FAILURE_MESSAGE), record.get(CREATED_AT));
         } catch (JacksonException exception) {
             throw new IllegalStateException("Stored run payload is invalid JSON.", exception);

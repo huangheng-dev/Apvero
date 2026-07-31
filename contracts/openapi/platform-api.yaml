@@ -111,10 +111,10 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [version]
               properties:
                 version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
-                manifest: { $ref: "../schemas/release-bundle-manifest.schema.json" }
       responses:
         "201":
           description: Content-addressed release created.
@@ -123,6 +123,8 @@ paths:
               schema: { $ref: "#/components/schemas/ReleaseBundle" }
         "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/applications/{applicationId}/runs:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -988,7 +990,6 @@ paths:
       tags: [Knowledge]
       summary: List immutable published Knowledge index versions
       operationId: listKnowledgeIndexVersions
-      x-apvero-implementation-status: contract-only
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: indexId
@@ -1063,19 +1064,17 @@ paths:
       tags: [Applications, Knowledge]
       summary: Get exact Knowledge bindings on an Application draft
       operationId: getApplicationDraftKnowledgeBindings
-      x-apvero-implementation-status: contract-only
       responses:
         "200":
           description: Mutable draft selections; production still uses immutable release pins.
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/ApplicationKnowledgeBinding" } }
+              schema: { $ref: "#/components/schemas/ApplicationKnowledgeBindingSet" }
         "404": { $ref: "#/components/responses/Problem" }
     put:
       tags: [Applications, Knowledge]
       summary: Replace exact Knowledge bindings on an Application draft
       operationId: replaceApplicationDraftKnowledgeBindings
-      x-apvero-implementation-status: contract-only
       requestBody:
         required: true
         content:
@@ -1083,10 +1082,10 @@ paths:
             schema: { $ref: "#/components/schemas/ReplaceApplicationKnowledgeBindingsRequest" }
       responses:
         "200":
-          description: Authorized READY versions bound to the mutable draft.
+          description: Opaque exact-version IDs selected on the mutable draft. Release creation performs authoritative workspace, existence, and READY validation.
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/ApplicationKnowledgeBinding" } }
+              schema: { $ref: "#/components/schemas/ApplicationKnowledgeBindingSet" }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -1096,7 +1095,7 @@ paths:
       tags: [Runs, Knowledge]
       summary: Inspect retained retrieval evidence for a Run
       operationId: getRunRetrievalEvidence
-      x-apvero-implementation-status: contract-only
+      x-apvero-implementation-status: baseline
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/RunId"
@@ -1113,7 +1112,7 @@ paths:
       tags: [Runs, Knowledge]
       summary: List citations validated for a grounded Run
       operationId: listRunCitations
-      x-apvero-implementation-status: contract-only
+      x-apvero-implementation-status: baseline
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/RunId"
@@ -1226,7 +1225,10 @@ components:
         applicationId: { type: string, format: uuid }
         version: { type: string }
         artifactDigest: { type: string, pattern: "^[a-f0-9]{64}$" }
-        manifest: { $ref: "../schemas/release-bundle-manifest.schema.json" }
+        manifest:
+          oneOf:
+            - $ref: "../schemas/release-bundle-manifest.schema.json"
+            - $ref: "../schemas/release-bundle-manifest.v1.1.schema.json"
         status: { type: string, enum: [RELEASED, RETIRED] }
         purpose: { type: string, enum: [PRODUCTION, PREVIEW] }
         expiresAt: { type: [string, "null"], format: date-time }
@@ -1241,7 +1243,7 @@ components:
         applicationId: { type: string, format: uuid }
         releaseBundleId: { type: string, format: uuid }
         modelRouteId: { type: [string, "null"], format: uuid, description: Null only for pre-P1 migrated history. }
-        status: { type: string, enum: [SUCCEEDED, FAILED] }
+        status: { type: string, enum: [RUNNING, SUCCEEDED, FAILED] }
         providerId: { type: string }
         actorId: { type: string }
         governanceReservationId: { type: [string, "null"], format: uuid, description: Null only for pre-P1 migrated history. }
@@ -1253,6 +1255,7 @@ components:
         costMicros: { type: integer, format: int64, minimum: 0 }
         traceId: { type: string }
         failureCategory: { type: [string, "null"] }
+        failureCode: { type: [string, "null"], pattern: "^APVERO_[A-Z0-9_]+$" }
         failureMessage: { type: [string, "null"] }
         createdAt: { type: string, format: date-time }
     UsageSummary:
@@ -1873,18 +1876,32 @@ components:
     ApplicationKnowledgeBinding:
       type: object
       additionalProperties: false
-      required: [indexVersionId, indexVersionReference, retrievalPolicyVersionId, retrievalPolicyVersionReference, bindingOrder]
+      required: [indexVersionId, retrievalPolicyVersionId, bindingOrder]
       properties:
         indexVersionId: { type: string, format: uuid }
-        indexVersionReference: { type: string }
         retrievalPolicyVersionId: { type: string, format: uuid }
-        retrievalPolicyVersionReference: { type: string }
         bindingOrder: { type: integer, minimum: 0, maximum: 15 }
+    ApplicationKnowledgeBindingSet:
+      type: object
+      additionalProperties: false
+      required: [applicationId, applicationVersion, bindings]
+      properties:
+        applicationId: { type: string, format: uuid }
+        applicationVersion: { type: integer, format: int64, minimum: 1 }
+        bindings:
+          type: array
+          maxItems: 16
+          items: { $ref: "#/components/schemas/ApplicationKnowledgeBinding" }
     ReplaceApplicationKnowledgeBindingsRequest:
       type: object
       additionalProperties: false
-      required: [bindings]
+      required: [expectedApplicationVersion, bindings]
       properties:
+        expectedApplicationVersion:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Optimistic concurrency token from the latest Application or binding-set projection.
         bindings:
           type: array
           maxItems: 16
@@ -1896,15 +1913,48 @@ components:
             properties:
               indexVersionId: { type: string, format: uuid }
               retrievalPolicyVersionId: { type: string, format: uuid }
+    RunRetrievalHit:
+      type: object
+      additionalProperties: false
+      required: [marker, rank, score, sourceId, sourceRevisionId, documentId, chunkId, contentDigest, sourceType, citationValidated]
+      properties:
+        marker: { type: string, pattern: "^\\[K[1-9][0-9]*\\]$" }
+        rank: { type: integer, minimum: 1, maximum: 100 }
+        score: { type: number, minimum: 0, maximum: 1 }
+        sourceId: { type: string, format: uuid }
+        sourceRevisionId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        chunkId: { type: string, format: uuid }
+        contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        content: { type: [string, "null"], maxLength: 20000, description: Bounded and filtered by the execution-time retention decision. }
+        sourceTitle: { type: [string, "null"], maxLength: 500 }
+        sourceType: { $ref: "#/components/schemas/KnowledgeSourceType" }
+        page: { type: [integer, "null"], minimum: 1 }
+        heading: { type: [string, "null"], maxLength: 1000 }
+        paragraph: { type: [integer, "null"], minimum: 1 }
+        lineStart: { type: [integer, "null"], minimum: 1 }
+        lineEnd: { type: [integer, "null"], minimum: 1 }
+        citationValidated: { type: boolean }
     RunRetrievalExecution:
-      unevaluatedProperties: false
-      allOf:
-        - $ref: "#/components/schemas/KnowledgeRetrievalResult"
-        - type: object
-          required: [retrievalId, sequence]
-          properties:
-            retrievalId: { type: string, format: uuid }
-            sequence: { type: integer, minimum: 0 }
+      type: object
+      additionalProperties: false
+      required: [retrievalId, sequence, status, indexVersionId, indexVersionReference, retrievalPolicyVersionId, retrievalPolicyVersionReference, queryDigest, hits, latencyMs, retentionDecisionVersion, createdAt]
+      properties:
+        retrievalId: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 0, maximum: 15 }
+        status: { type: string, enum: [MATCHES, NO_EVIDENCE] }
+        indexVersionId: { type: string, format: uuid }
+        indexVersionReference: { type: string, maxLength: 240, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        retrievalPolicyVersionId: { type: string, format: uuid }
+        retrievalPolicyVersionReference: { type: string, maxLength: 240, pattern: "^[a-z0-9][a-z0-9._:/-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?$" }
+        queryDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        hits:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/RunRetrievalHit" }
+        latencyMs: { type: integer, format: int64, minimum: 0 }
+        retentionDecisionVersion: { type: integer, format: int64, minimum: 1 }
+        createdAt: { type: string, format: date-time }
     RunRetrievalEvidence:
       type: object
       additionalProperties: false

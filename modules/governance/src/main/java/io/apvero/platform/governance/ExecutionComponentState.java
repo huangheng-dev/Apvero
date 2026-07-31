@@ -5,5 +5,6 @@ public enum ExecutionComponentState {
     DISPATCHED,
     SUCCEEDED,
     FAILED,
+    RELEASED,
     RECONCILIATION_REQUIRED
 }

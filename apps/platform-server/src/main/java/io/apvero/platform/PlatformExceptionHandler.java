@@ -1,11 +1,14 @@
 package io.apvero.platform;
 
 import io.apvero.platform.application.ApplicationNotFoundException;
+import io.apvero.platform.application.ApplicationKnowledgeBindingException;
 import io.apvero.platform.release.ReleaseNotFoundException;
+import io.apvero.platform.release.ReleaseException;
 import io.apvero.platform.governance.BudgetExceededException;
 import io.apvero.platform.governance.RateLimitExceededException;
 import io.apvero.platform.knowledge.KnowledgeDisabledException;
 import io.apvero.platform.knowledge.KnowledgeException;
+import io.apvero.platform.runtime.RunEvidenceException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -26,9 +29,27 @@ class PlatformExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "APVERO_APPLICATION_NOT_FOUND", exception.getMessage());
     }
 
+    @ExceptionHandler(ApplicationKnowledgeBindingException.class)
+    ProblemDetail applicationKnowledgeBinding(ApplicationKnowledgeBindingException exception) {
+        HttpStatus status = switch (exception.category()) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case CONFLICT -> HttpStatus.CONFLICT;
+        };
+        return problem(status, exception.code(), exception.code());
+    }
+
     @ExceptionHandler(ReleaseNotFoundException.class)
     ProblemDetail releaseNotFound(ReleaseNotFoundException exception) {
         return problem(HttpStatus.NOT_FOUND, "APVERO_RELEASE_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(ReleaseException.class)
+    ProblemDetail releaseProblem(ReleaseException exception) {
+        HttpStatus status = switch (exception.category()) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case CONFLICT -> HttpStatus.CONFLICT;
+        };
+        return problem(status, exception.code(), exception.code());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -63,6 +84,16 @@ class PlatformExceptionHandler {
             case CONTENT_TOO_LARGE -> HttpStatus.CONTENT_TOO_LARGE;
             case UNSUPPORTED_MEDIA -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case UNPROCESSABLE -> HttpStatus.UNPROCESSABLE_CONTENT;
+        };
+        return problem(status, exception.code(), exception.code());
+    }
+
+    @ExceptionHandler(RunEvidenceException.class)
+    ProblemDetail runEvidenceProblem(RunEvidenceException exception) {
+        HttpStatus status = switch (exception.category()) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case CONFLICT -> HttpStatus.CONFLICT;
         };
         return problem(status, exception.code(), exception.code());
     }

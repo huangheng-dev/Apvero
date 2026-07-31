@@ -8,4 +8,8 @@ public interface RuntimeProvider {
     boolean supports(ReleaseBundle release);
 
     ProviderResult execute(ProviderRequest request);
+
+    default ProviderFailureDisposition failureDisposition(RuntimeException failure) {
+        return ProviderFailureDisposition.RECONCILIATION_REQUIRED;
+    }
 }

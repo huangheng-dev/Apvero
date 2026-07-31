@@ -9,9 +9,9 @@ P2 is in progress. ADR-0006 is accepted. The contracts in this document are appr
 | Contract | Status | Purpose |
 |---|---|---|
 | `release-bundle-manifest.schema.json` | legacy-live | Accurately describes recognized Manifest 1.0 CHAT forms, including P1 integer shorthand and generated runtime metadata. |
-| `release-bundle-manifest.v1.1.schema.json` | contract-only | Strict CHAT/RAG release pins with explicit runtime mode and exact Knowledge bindings. |
-| `citation.v1.schema.json` | contract-only | Citation identity validated against immutable Run retrieval evidence. |
-| `grounded-answer.v1.schema.json` | contract-only | `GROUNDED` or `NO_EVIDENCE` structured RAG output. |
+| `release-bundle-manifest.v1.1.schema.json` | Release and Runtime baseline | Strict CHAT/RAG release pins with explicit runtime mode and exact Knowledge bindings. |
+| `citation.v1.schema.json` | Runtime baseline | Citation identity validated against immutable Run retrieval evidence. |
+| `grounded-answer.v1.schema.json` | Runtime baseline | `GROUNDED` or `NO_EVIDENCE` structured RAG output. |
 | `platform-api.yaml` Knowledge operations | contract-only | Workspace-scoped source, job, index, retrieval, binding, and Run-evidence workflow. |
 | `ai-worker-internal.v1.yaml` | contract-only, internal-only | Stateless bounded parsing and deterministic chunking between Java and the worker. |
 
@@ -34,7 +34,22 @@ The maintainer approved the P2.2 pre-implementation correction on 2026-07-24:
    stricter disclosure policy always takes priority over historical policy provenance.
 
 These are corrections to contract-only P2.2 fields; they migrate no live client or stored P2.2 row.
-The separate Manifest 1.1 Model/Prompt reference mismatch remains an explicit P2.3 prerequisite.
+P2.3a reconciles the separate Manifest 1.1 Model/Prompt reference mismatch before the manifest
+becomes writable.
+
+## P2.3a contract reconciliation
+
+Manifest 1.1 now uses field-specific exact-reference rules:
+
+- implemented Model Route and Prompt identities use their canonical `name@positive-integer` form;
+- Knowledge Index and Retrieval Policy identities use canonical semantic versions;
+- other exact artifact fields accept their owning aggregate's integer or semantic identity;
+- every form forbids `latest`.
+
+Application draft Knowledge bindings are intentionally opaque in the Application module. Their
+public projection contains only Index Version ID, Retrieval Policy Version ID, binding order, and
+Application optimistic version metadata. Release performs authoritative workspace, existence,
+READY-state, and canonical-reference validation through Knowledge public APIs.
 
 ## Compatibility rules
 
@@ -43,12 +58,28 @@ The separate Manifest 1.1 Model/Prompt reference mismatch remains an explicit P2
 3. The existing release-create endpoint continues to advertise Manifest 1.0 until P2.3 implements full 1.1 validation and runtime behavior.
 4. A new RAG release must use Manifest 1.1 and contain at least one exact `indexVersion + retrievalPolicyVersion` binding.
 5. Manifest 1.1 CHAT releases must contain no Knowledge binding.
-6. Integer shorthand such as `none@1` is legacy-only. Manifest 1.1 requires semantic-version references and forbids `latest`.
+6. Manifest 1.1 uses field-specific exact identities: Model Route and Prompt use their implemented integer versions, Knowledge Index and Retrieval Policy use semantic versions, and every field forbids `latest`.
 7. Once a Manifest 1.1 RAG release exists, a P1-only runtime is below the supported rollback floor.
 
-Rule 6 describes the current contract-only Manifest 1.1 schema and does not redefine the existing
-Model Route or Prompt aggregates. P2.3 must reconcile that schema with their implemented integer
-version identities before Manifest 1.1 becomes live.
+Rule 6 preserves the existing Model Route and Prompt aggregates rather than inventing a second
+version system. P2.3b now implements complete offline validation and authoritative Release
+pinning. Manifest 1.1 is now the Release and Runtime baseline after the complete P2.3 grounded
+execution closure passed its compatibility candidate gates.
+
+## P2.3b Release pinning
+
+The standard Application Release write accepts a semantic Release version only. The server
+constructs the manifest from the authenticated Application draft and authoritative public
+projections; a client cannot submit or override pins.
+
+- CHAT continues to produce the legacy Manifest 1.0 shape for P1 runtime compatibility.
+- RAG produces Manifest 1.1 only after every ordered opaque binding resolves to an exact
+  workspace-scoped READY Index Version and an executable Retrieval Policy Version.
+- Both 1.0 and 1.1 are validated against packaged Draft 2020-12 schemas through an offline
+  allowlisted registry before insertion and on read.
+- Unknown schema versions and malformed manifests use stable Release error codes.
+- Existing Runtime providers accept Manifest 1.0 CHAT and explicit Manifest 1.1 CHAT.
+- Manifest 1.1 RAG executes only through grounded orchestration and never falls back to CHAT.
 
 ## Public workflow
 
@@ -84,3 +115,31 @@ P2.1a removed the legacy worker host port and general `/worker/` proxy. The work
 4. P2.4 makes the bilingual product surface live only after all universal gates pass.
 
 Contract-only status must be removed operation by operation only when implementation, security, telemetry, i18n, failure tests, and Compose evidence exist.
+
+## P2.3e grounded output baseline
+
+Runtime now accepts a strict provider draft containing only schema version, `GROUNDED` status,
+answer text, and evidence markers. The model does not supply public Citation metadata. Runtime
+derives Grounded Answer 1.0 and Citation 1.0 identities from the immutable evidence ledger for the
+same Run, rejects malformed, duplicate, unknown, or fabricated markers, and atomically marks only
+accepted evidence hits as citation-validated when the Run succeeds.
+
+The citation-list operation is now a Runtime baseline. It remains workspace-scoped and returns
+only validated evidence. Authorization-checked relative source locators are generated at read time
+from retained source-revision identities and anchors; no locator or storage path is persisted in
+the model output or citation ledger. P2.3 as a whole remains in progress until P2.3f closes
+compatibility, restart, security, and end-to-end gates.
+
+## P2.3f compatibility baseline
+
+Runtime preserves actual historical Manifest 1.0 releases without rewriting their immutable
+rows. The legacy generated `name@N.0.0` Model Route and Prompt references are normalized to their
+canonical `name@N` identities only in the in-memory execution projection. Ambiguous non-zero
+semantic versions are not guessed. Explicit Manifest 1.1 CHAT continues through the governed CHAT
+path, while Manifest 1.1 RAG is routed exclusively through grounded execution.
+
+Runtime execution reads the immutable ReleaseBundle rather than the mutable Application draft.
+Runs and verified citation lineage remain readable from PostgreSQL after in-memory provider,
+retrieval, and catalog state is discarded. Source resynchronization and tombstone affect future
+build selection without changing the membership or retrieval behavior of an already published
+Index Version.

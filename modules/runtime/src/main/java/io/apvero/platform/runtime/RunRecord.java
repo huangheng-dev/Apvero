@@ -22,6 +22,7 @@ public record RunRecord(
         int completionTokens,
         long costMicros,
         String traceId,
+        String failureCode,
         String failureCategory,
         String failureMessage,
         OffsetDateTime createdAt) {}

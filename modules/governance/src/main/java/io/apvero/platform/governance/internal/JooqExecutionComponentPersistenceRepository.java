@@ -137,7 +137,15 @@ class JooqExecutionComponentPersistenceRepository
             OffsetDateTime now) {
         ExecutionComponentPersistenceRecord current =
                 lock(scope, reservationId, idempotencyIdentity);
-        String targetStatus = succeeded ? "SUCCEEDED" : "FAILED";
+        boolean releaseRequest = !succeeded
+                && actualUnits == 0
+                && actualCostMicros == 0;
+        String targetStatus =
+                releaseRequest
+                                && ("RESERVED".equals(current.status())
+                                || "RELEASED".equals(current.status()))
+                        ? "RELEASED"
+                        : succeeded ? "SUCCEEDED" : "FAILED";
         if (!currency.equals(current.currency())) {
             throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
         }
@@ -148,18 +156,21 @@ class JooqExecutionComponentPersistenceRepository
             }
             throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
         }
-        if (!"DISPATCHED".equals(current.status())) {
+        boolean releasesReserved =
+                "RESERVED".equals(current.status()) && releaseRequest;
+        if (!"DISPATCHED".equals(current.status()) && !releasesReserved) {
             throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
         }
+        String expectedStatus = releasesReserved ? "RESERVED" : "DISPATCHED";
         int changed = sql.execute("""
                 update execution_reservation_component
                 set status = ?, actual_units = ?, actual_cost_micros = ?, currency = ?,
                     usage_quality = ?, failure_code = ?, settled_at = ?, updated_at = ?
                 where tenant_id = ? and workspace_id = ? and reservation_id = ?
-                  and idempotency_identity = ? and status = 'DISPATCHED'
+                  and idempotency_identity = ? and status = ?
                 """, targetStatus, actualUnits, actualCostMicros, currency, usageQuality,
                 failureCode, timestamp(now), timestamp(now), scope.tenantId(), scope.workspaceId(),
-                reservationId, idempotencyIdentity);
+                reservationId, idempotencyIdentity, expectedStatus);
         if (changed != 1) {
             throw conflict("APVERO_EXECUTION_COMPONENT_SETTLEMENT_CONFLICT");
         }

@@ -4,6 +4,7 @@ spring-ai = "2.0.0"
 spring-modulith = "2.1.0"
 archunit = "1.4.1"
 testcontainers = "2.0.5"
+networknt-json-schema = "3.0.2"
 
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
@@ -30,6 +31,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt-json-schema" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

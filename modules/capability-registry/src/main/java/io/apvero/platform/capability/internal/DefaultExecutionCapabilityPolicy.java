@@ -4,11 +4,23 @@ import static org.jooq.impl.DSL.field;
 import static org.jooq.impl.DSL.table;
 
 import io.apvero.platform.capability.ExecutionCapabilityPolicy;
+import io.apvero.platform.capability.ChatExecutionPermit;
+import io.apvero.platform.capability.CapabilityExecutionException;
 import io.apvero.platform.capability.ExecutionPermit;
+import io.apvero.platform.capability.ExecutionRetentionDecision;
 import io.apvero.platform.capability.ModelRouteReadiness;
 import io.apvero.platform.capability.ModelRouteReadinessCatalog;
 import io.apvero.platform.governance.ExecutionAdmission;
+import io.apvero.platform.governance.ExecutionComponentDispatch;
+import io.apvero.platform.governance.ExecutionComponentReconciliation;
+import io.apvero.platform.governance.ExecutionComponentRequest;
+import io.apvero.platform.governance.ExecutionComponentSettlement;
+import io.apvero.platform.governance.ExecutionComponentState;
+import io.apvero.platform.governance.ExecutionComponentType;
 import io.apvero.platform.governance.ExecutionGovernance;
+import io.apvero.platform.governance.ExecutionReservationRequest;
+import io.apvero.platform.governance.ExecutionSubject;
+import io.apvero.platform.governance.RetentionPolicyCatalog;
 import io.apvero.platform.governance.SecretReferenceCatalog;
 import io.apvero.platform.identity.WorkspaceScopeCatalog;
 import java.util.List;
@@ -24,13 +36,16 @@ public class DefaultExecutionCapabilityPolicy implements ExecutionCapabilityPoli
     private final ExecutionGovernance governance;
     private final SecretReferenceCatalog secrets;
     private final WorkspaceScopeCatalog workspaces;
+    private final RetentionPolicyCatalog retentionPolicies;
 
     public DefaultExecutionCapabilityPolicy(DSLContext sql, ExecutionGovernance governance,
-            SecretReferenceCatalog secrets, WorkspaceScopeCatalog workspaces) {
+            SecretReferenceCatalog secrets, WorkspaceScopeCatalog workspaces,
+            RetentionPolicyCatalog retentionPolicies) {
         this.sql = sql;
         this.governance = governance;
         this.secrets = secrets;
         this.workspaces = workspaces;
+        this.retentionPolicies = retentionPolicies;
     }
 
     @Override
@@ -49,6 +64,113 @@ public class DefaultExecutionCapabilityPolicy implements ExecutionCapabilityPoli
     @Override
     public void settle(UUID reservationId, long actualCostMicros, boolean succeeded) {
         governance.settle(reservationId, actualCostMicros, succeeded);
+    }
+
+    @Override
+    public ExecutionRetentionDecision currentRetention(UUID workspaceId) {
+        var retention = retentionPolicies.getOrCreate(workspaceId);
+        return new ExecutionRetentionDecision(
+                retention.version(),
+                retention.retainPayloads(),
+                retention.maskSensitiveFields());
+    }
+
+    @Override
+    public UUID resolveChatRouteId(UUID workspaceId, String modelRouteReference) {
+        return routeCost(workspaceId, modelRouteReference).id();
+    }
+
+    @Override
+    public ChatExecutionPermit reserveChat(
+            UUID workspaceId,
+            UUID applicationId,
+            String modelRouteReference,
+            String actorId,
+            String traceId,
+            long estimatedInputUnits) {
+        if (estimatedInputUnits < 1) {
+            throw new IllegalArgumentException("APVERO_CHAT_INPUT_UNITS_INVALID");
+        }
+        RouteCost route = routeCost(workspaceId, modelRouteReference);
+        long estimatedInputCost =
+                multiplyAndRoundUp(estimatedInputUnits, route.inputCostMicrosPerMillion());
+        long estimatedOutputCost =
+                multiplyAndRoundUp(route.maxOutputTokens(), route.outputCostMicrosPerMillion());
+        long estimatedCost = Math.addExact(estimatedInputCost, estimatedOutputCost);
+        String identity = "chat-generation:" + traceId;
+        ExecutionAdmission admission = governance.admit(new ExecutionReservationRequest(
+                workspaceId,
+                ExecutionSubject.applicationRun(applicationId),
+                actorId,
+                traceId,
+                List.of(new ExecutionComponentRequest(
+                        ExecutionComponentType.CHAT_GENERATION,
+                        route.id(),
+                        modelRouteReference,
+                        identity,
+                        estimatedInputUnits,
+                        estimatedCost,
+                        "USD"))));
+        var component = governance.findComponent(
+                        workspaceId, admission.reservationId(), identity)
+                .orElseThrow(() -> new CapabilityExecutionException(
+                        "APVERO_EXECUTION_COMPONENT_NOT_FOUND"));
+        if (component.state() == ExecutionComponentState.DISPATCHED
+                || component.state() == ExecutionComponentState.RECONCILIATION_REQUIRED) {
+            throw new CapabilityExecutionException(
+                    "APVERO_EXTERNAL_OUTCOME_RECONCILIATION_REQUIRED");
+        }
+        if (component.state() != ExecutionComponentState.RESERVED) {
+            throw new CapabilityExecutionException(
+                    "APVERO_EXECUTION_RESERVATION_IDEMPOTENCY_CONFLICT");
+        }
+        return new ChatExecutionPermit(
+                admission.reservationId(),
+                route.id(),
+                modelRouteReference,
+                identity,
+                estimatedInputUnits,
+                estimatedCost,
+                "USD",
+                new ExecutionRetentionDecision(
+                        admission.retentionDecisionVersion(),
+                        admission.retainPayloads(),
+                        admission.maskSensitiveFields()));
+    }
+
+    @Override
+    public void markChatDispatched(
+            ChatExecutionPermit permit, String providerRequestIdentity) {
+        governance.markDispatched(new ExecutionComponentDispatch(
+                permit.reservationId(),
+                permit.componentIdentity(),
+                providerRequestIdentity));
+    }
+
+    @Override
+    public void settleChat(
+            ChatExecutionPermit permit,
+            long actualUnits,
+            long actualCostMicros,
+            boolean succeeded,
+            String failureCode) {
+        governance.settle(new ExecutionComponentSettlement(
+                permit.reservationId(),
+                permit.componentIdentity(),
+                actualUnits,
+                actualCostMicros,
+                permit.currency(),
+                succeeded,
+                failureCode));
+    }
+
+    @Override
+    public void requireChatReconciliation(
+            ChatExecutionPermit permit, String failureCode) {
+        governance.requireReconciliation(new ExecutionComponentReconciliation(
+                permit.reservationId(),
+                permit.componentIdentity(),
+                failureCode));
     }
 
     @Override

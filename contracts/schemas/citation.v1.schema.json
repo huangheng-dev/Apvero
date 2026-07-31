@@ -3,7 +3,7 @@
   "$id": "https://schemas.apvero.dev/citation/1.0.0",
   "title": "Apvero Verified Citation 1.0",
   "description": "A citation validated against immutable retrieval evidence retained for one Run. The authorized locator is generated at read time and is never a storage path.",
-  "x-apvero-contract-status": "contract-only",
+  "x-apvero-contract-status": "baseline",
   "type": "object",
   "additionalProperties": false,
   "required": [

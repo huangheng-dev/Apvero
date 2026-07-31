@@ -109,7 +109,9 @@ public class DefaultCapabilityCatalog implements CapabilityCatalog {
     @Override
     public List<ModelRoute> listRoutes(UUID workspaceId) {
         return sql.select().from(table("model_route"))
-                .where(field("workspace_id", UUID.class).eq(workspaceId)).orderBy(field("created_at").desc())
+                .where(field("workspace_id", UUID.class).eq(workspaceId)
+                        .and(field("route_capability", String.class).eq("CHAT")))
+                .orderBy(field("created_at").desc())
                 .fetch(this::mapRoute);
     }
 

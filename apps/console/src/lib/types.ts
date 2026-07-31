@@ -35,7 +35,7 @@ export interface RunRecord {
   applicationId: string;
   releaseBundleId: string;
   modelRouteId?: string | null;
-  status: "SUCCEEDED" | "FAILED";
+  status: "RUNNING" | "SUCCEEDED" | "FAILED";
   providerId: string;
   actorId: string;
   governanceReservationId?: string | null;
@@ -46,6 +46,7 @@ export interface RunRecord {
   completionTokens: number;
   costMicros: number;
   traceId: string;
+  failureCode?: string | null;
   failureCategory?: string | null;
   failureMessage?: string | null;
   createdAt: string;

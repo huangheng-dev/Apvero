@@ -6,6 +6,7 @@ dependencies {
     implementation(project(":modules:application"))
     implementation(project(":modules:release"))
     implementation(project(":modules:capability-registry"))
+    implementation(project(":modules:knowledge"))
     api(libs.spring.modulith.api)
     implementation(libs.spring.boot.webmvc)
     implementation(libs.spring.boot.validation)

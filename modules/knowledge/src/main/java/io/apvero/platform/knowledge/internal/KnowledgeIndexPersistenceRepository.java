@@ -25,6 +25,9 @@ interface KnowledgeIndexPersistenceRepository {
 
     Optional<RetrievalPolicyRow> findPolicy(WorkspaceScope scope, UUID policyId);
 
+    Optional<RetrievalPolicyRow> findPolicyByReference(
+            WorkspaceScope scope, String reference);
+
     Optional<RetrievalPolicyRow> findPolicyBySlugAndVersion(
             WorkspaceScope scope, String slug, String version);
 
@@ -140,6 +143,10 @@ interface KnowledgeIndexPersistenceRepository {
     VersionRow insertPublishedVersion(WorkspaceScope scope, VersionRow row);
 
     Optional<VersionRow> findVersion(WorkspaceScope scope, UUID versionId);
+
+    Optional<VersionRow> findVersionByReference(WorkspaceScope scope, String reference);
+
+    List<VersionRow> listVersions(WorkspaceScope scope);
 
     List<VersionRow> listVersions(WorkspaceScope scope, UUID indexId);
 

@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apvero.dev/release-bundle-manifest/1.1.0",
   "title": "Apvero Release Bundle Manifest 1.1",
-  "description": "Strict immutable release contract for CHAT and grounded RAG applications. This contract is approved in P2.0 and remains contract-only until the P2 runtime implements it.",
-  "x-apvero-contract-status": "contract-only",
+  "description": "Strict immutable release contract implemented for CHAT and grounded RAG applications.",
+  "x-apvero-contract-status": "baseline",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,9 +22,9 @@
   "properties": {
     "schemaVersion": { "const": "1.1" },
     "runtimeMode": { "enum": ["CHAT", "RAG"] },
-    "modelRouteVersion": { "$ref": "#/$defs/exactVersionReference" },
-    "promptVersion": { "$ref": "#/$defs/exactVersionReference" },
-    "outputSchemaVersion": { "$ref": "#/$defs/exactVersionReference" },
+    "modelRouteVersion": { "$ref": "#/$defs/integerVersionReference" },
+    "promptVersion": { "$ref": "#/$defs/integerVersionReference" },
+    "outputSchemaVersion": { "$ref": "#/$defs/exactArtifactReference" },
     "knowledgeBindings": {
       "type": "array",
       "maxItems": 16,
@@ -34,18 +34,18 @@
     "capabilityVersions": {
       "type": "array",
       "maxItems": 64,
-      "items": { "$ref": "#/$defs/exactVersionReference" },
+      "items": { "$ref": "#/$defs/exactArtifactReference" },
       "uniqueItems": true
     },
     "policyVersions": {
       "type": "array",
       "minItems": 1,
       "maxItems": 64,
-      "items": { "$ref": "#/$defs/exactVersionReference" },
+      "items": { "$ref": "#/$defs/exactArtifactReference" },
       "uniqueItems": true
     },
-    "memoryPolicyVersion": { "$ref": "#/$defs/exactVersionReference" },
-    "evaluationReportVersion": { "$ref": "#/$defs/exactVersionReference" },
+    "memoryPolicyVersion": { "$ref": "#/$defs/exactArtifactReference" },
+    "evaluationReportVersion": { "$ref": "#/$defs/exactArtifactReference" },
     "runtimeParameters": {
       "type": "object",
       "additionalProperties": false,
@@ -77,7 +77,21 @@
     }
   ],
   "$defs": {
-    "exactVersionReference": {
+    "integerVersionReference": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 240,
+      "description": "Exact identity used by the implemented Model Route and Prompt aggregates.",
+      "pattern": "^(?!.*(?:^|[@:/-])latest(?:$|[@:/-]))[a-z0-9][a-z0-9._:/-]*@[1-9][0-9]*$"
+    },
+    "exactArtifactReference": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 240,
+      "description": "Exact integer- or semantic-versioned artifact identity; latest is forbidden.",
+      "pattern": "^(?!.*(?:^|[@:/-])latest(?:$|[@:/-]))[a-z0-9][a-z0-9._:/-]*@(?:[1-9][0-9]*|[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-z0-9.-]+)?)$"
+    },
+    "semanticVersionReference": {
       "type": "string",
       "minLength": 7,
       "maxLength": 240,
@@ -88,8 +102,8 @@
       "additionalProperties": false,
       "required": ["indexVersion", "retrievalPolicyVersion"],
       "properties": {
-        "indexVersion": { "$ref": "#/$defs/exactVersionReference" },
-        "retrievalPolicyVersion": { "$ref": "#/$defs/exactVersionReference" }
+        "indexVersion": { "$ref": "#/$defs/semanticVersionReference" },
+        "retrievalPolicyVersion": { "$ref": "#/$defs/semanticVersionReference" }
       }
     }
   }

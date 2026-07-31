@@ -179,6 +179,15 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
     }
 
     @Override
+    public Optional<RetrievalPolicyRow> findPolicyByReference(
+            WorkspaceScope scope, String reference) {
+        return sql.fetchOptional(POLICY_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and slug || '@' || version = ?",
+                        scope.tenantId(), scope.workspaceId(), reference)
+                .map(this::mapPolicy);
+    }
+
+    @Override
     public Optional<RetrievalPolicyRow> findPolicyBySlugAndVersion(
             WorkspaceScope scope, String slug, String version) {
         return sql.fetchOptional(POLICY_SELECT
@@ -882,6 +891,25 @@ class JooqKnowledgeIndexPersistenceRepository implements KnowledgeIndexPersisten
         return sql.fetchOptional(VERSION_SELECT
                         + " where tenant_id = ? and workspace_id = ? and id = ?",
                         scope.tenantId(), scope.workspaceId(), versionId)
+                .map(this::mapVersion);
+    }
+
+    @Override
+    public Optional<VersionRow> findVersionByReference(
+            WorkspaceScope scope, String reference) {
+        return sql.fetchOptional(VERSION_SELECT
+                        + " where tenant_id = ? and workspace_id = ? and reference = ?",
+                        scope.tenantId(), scope.workspaceId(), reference)
+                .map(this::mapVersion);
+    }
+
+    @Override
+    public List<VersionRow> listVersions(WorkspaceScope scope) {
+        return sql.fetch(VERSION_SELECT
+                        + """
+                         where tenant_id = ? and workspace_id = ?
+                         order by published_at, id
+                         """, scope.tenantId(), scope.workspaceId())
                 .map(this::mapVersion);
     }
 

@@ -4,8 +4,11 @@ import static org.jooq.impl.DSL.field;
 import static org.jooq.impl.DSL.table;
 
 import io.apvero.platform.application.AiApplication;
+import io.apvero.platform.application.ApplicationKnowledgeBinding;
+import io.apvero.platform.application.ApplicationKnowledgeBindingSet;
 import io.apvero.platform.application.ApplicationStatus;
 import io.apvero.platform.application.CreateApplicationCommand;
+import io.apvero.platform.application.ReplaceApplicationKnowledgeBindingsCommand;
 import io.apvero.platform.application.RuntimeMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -90,6 +93,80 @@ public class JooqApplicationRepository implements ApplicationRepository {
                 .execute();
         if (changed == 0) throw new IllegalArgumentException("Unknown AI Application.");
         return findById(workspaceId, applicationId).orElseThrow();
+    }
+
+    @Override
+    public Optional<ApplicationKnowledgeBindingSet> findDraftKnowledgeBindings(
+            UUID workspaceId, UUID applicationId) {
+        var records = sql.fetch("""
+                select application.id as application_id,
+                       application.version as application_version,
+                       binding.knowledge_index_version_id,
+                       binding.retrieval_policy_version_id,
+                       binding.binding_order
+                from ai_application application
+                left join application_draft_knowledge_binding binding
+                  on binding.application_id = application.id
+                 and binding.tenant_id = application.tenant_id
+                 and binding.workspace_id = application.workspace_id
+                where application.workspace_id = ?
+                  and application.id = ?
+                order by binding.binding_order
+                """, workspaceId, applicationId);
+        if (records.isEmpty()) {
+            return Optional.empty();
+        }
+        List<ApplicationKnowledgeBinding> bindings = records.stream()
+                .filter(record -> record.get("knowledge_index_version_id", UUID.class) != null)
+                .map(record -> new ApplicationKnowledgeBinding(
+                        record.get("knowledge_index_version_id", UUID.class),
+                        record.get("retrieval_policy_version_id", UUID.class),
+                        record.get("binding_order", Integer.class)))
+                .toList();
+        Record first = records.getFirst();
+        return Optional.of(new ApplicationKnowledgeBindingSet(
+                first.get("application_id", UUID.class),
+                first.get("application_version", Long.class),
+                bindings));
+    }
+
+    @Override
+    public Optional<ApplicationKnowledgeBindingSet> replaceDraftKnowledgeBindings(
+            UUID workspaceId,
+            UUID applicationId,
+            UUID tenantId,
+            long expectedApplicationVersion,
+            List<ReplaceApplicationKnowledgeBindingsCommand.BindingSelection> bindings) {
+        int changed = sql.execute("""
+                update ai_application
+                set version = version + 1,
+                    updated_at = transaction_timestamp()
+                where id = ?
+                  and tenant_id = ?
+                  and workspace_id = ?
+                  and version = ?
+                """, applicationId, tenantId, workspaceId, expectedApplicationVersion);
+        if (changed == 0) {
+            return Optional.empty();
+        }
+        sql.execute("""
+                delete from application_draft_knowledge_binding
+                where application_id = ?
+                  and tenant_id = ?
+                  and workspace_id = ?
+                """, applicationId, tenantId, workspaceId);
+        for (int order = 0; order < bindings.size(); order++) {
+            var binding = bindings.get(order);
+            sql.execute("""
+                    insert into application_draft_knowledge_binding(
+                        application_id, tenant_id, workspace_id, binding_order,
+                        knowledge_index_version_id, retrieval_policy_version_id,
+                        created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, transaction_timestamp(), transaction_timestamp())
+                    """, applicationId, tenantId, workspaceId, order,
+                    binding.indexVersionId(), binding.retrievalPolicyVersionId());
+        }
+        return findDraftKnowledgeBindings(workspaceId, applicationId);
     }
 
     private AiApplication map(Record record) {

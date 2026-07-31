@@ -296,7 +296,11 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                         safe(actorId, "system"), traceId, estimatedCostMicros, "RESERVED", now)
                 .execute();
         RetentionPolicy retention = get(workspaceId);
-        return new ExecutionAdmission(reservationId, retention.retainPayloads(), retention.maskSensitiveFields());
+        return new ExecutionAdmission(
+                reservationId,
+                retention.retainPayloads(),
+                retention.maskSensitiveFields(),
+                retention.version());
     }
 
     @Override
@@ -650,7 +654,10 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
     private ExecutionAdmission admission(UUID reservationId, UUID workspaceId) {
         RetentionPolicy retention = get(workspaceId);
         return new ExecutionAdmission(
-                reservationId, retention.retainPayloads(), retention.maskSensitiveFields());
+                reservationId,
+                retention.retainPayloads(),
+                retention.maskSensitiveFields(),
+                retention.version());
     }
 
     private WorkspaceScope scopeForReservation(UUID reservationId) {
@@ -697,7 +704,8 @@ public class DefaultGovernanceCatalog implements BudgetPolicyCatalog, RetentionP
                 components.listByReservation(scope, reservationId);
         if (rows.isEmpty()
                 || rows.stream().anyMatch(row -> !"SUCCEEDED".equals(row.status())
-                        && !"FAILED".equals(row.status()))) {
+                        && !"FAILED".equals(row.status())
+                        && !"RELEASED".equals(row.status()))) {
             return;
         }
         long actualCost = 0;

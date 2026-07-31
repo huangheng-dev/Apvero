@@ -20,6 +20,7 @@ import io.apvero.platform.knowledge.KnowledgeAvailability;
 import io.apvero.platform.knowledge.KnowledgeCommandContext;
 import io.apvero.platform.knowledge.KnowledgeException;
 import io.apvero.platform.knowledge.RetrievalPolicyOverlapHandling;
+import io.apvero.platform.knowledge.RetrievalPolicyVersion;
 import io.apvero.platform.knowledge.internal.KnowledgeIndexPersistenceRecords.RetrievalPolicyRow;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -226,6 +227,62 @@ class DefaultRetrievalPolicyVersionCatalogTest {
                         null),
                 "APVERO_KNOWLEDGE_RETRIEVAL_POLICY_REQUEST_INVALID");
         verify(retention, never()).getOrCreate(any());
+    }
+
+    @Test
+    void resolvesOneExactPolicyAndFailsClosedWhenItIsOutsideTheScope() {
+        RetrievalPolicyRow existing = row(
+                "support",
+                "1.0.0",
+                8,
+                4096,
+                new BigDecimal("0.7"),
+                RetrievalPolicyOverlapHandling.KEEP,
+                1);
+        when(policies.findPolicy(scope, existing.id())).thenReturn(Optional.of(existing));
+
+        assertThat(catalog.get(workspaceId, existing.id()).id()).isEqualTo(existing.id());
+
+        UUID unknown = UUID.randomUUID();
+        when(policies.findPolicy(scope, unknown)).thenReturn(Optional.empty());
+        assertCode(
+                () -> catalog.get(workspaceId, unknown),
+                "APVERO_KNOWLEDGE_RETRIEVAL_POLICY_VERSION_NOT_FOUND");
+    }
+
+    @Test
+    void executionSupportRequiresEveryPinnedAlgorithmIdentityAndRetentionProvenance() {
+        RetrievalPolicyRow existing = row(
+                "support",
+                "1.0.0",
+                8,
+                4096,
+                new BigDecimal("0.7"),
+                RetrievalPolicyOverlapHandling.KEEP,
+                1);
+        when(policies.findPolicy(scope, existing.id())).thenReturn(Optional.of(existing));
+        RetrievalPolicyVersion supported = catalog.get(workspaceId, existing.id());
+
+        assertThat(catalog.supportsExecution(supported)).isTrue();
+        assertThat(catalog.supportsExecution(null)).isFalse();
+        assertThat(catalog.supportsExecution(new RetrievalPolicyVersion(
+                        supported.id(),
+                        supported.tenantId(),
+                        supported.workspaceId(),
+                        supported.slug(),
+                        supported.version(),
+                        supported.reference(),
+                        supported.topK(),
+                        supported.maxContextTokens(),
+                        supported.minimumScore(),
+                        supported.overlapHandling(),
+                        "future-ranking@2.0.0",
+                        supported.tokenEstimatorVersion(),
+                        supported.retentionPolicyVersionAtPublish(),
+                        supported.policyDigest(),
+                        supported.emptyEvidenceBehavior(),
+                        supported.createdAt())))
+                .isFalse();
     }
 
     @Test

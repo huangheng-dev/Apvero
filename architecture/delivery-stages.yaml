@@ -164,25 +164,46 @@ stages:
         slices:
           - id: P2.3a
             name: Contract reconciliation and opaque Application bindings
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3a-verification.md
+              - docs/zh-CN/p2-3a-verification.md
           - id: P2.3b
             name: Immutable Manifest 1.1 release pinning
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3b-verification.md
+              - docs/zh-CN/p2-3b-verification.md
           - id: P2.3c
             name: Scoped Run retrieval evidence ledger
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3c-verification.md
+              - docs/zh-CN/p2-3c-verification.md
           - id: P2.3d
             name: Grounded runtime orchestration
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3d-verification.md
+              - docs/zh-CN/p2-3d-verification.md
           - id: P2.3e
             name: Structured answer and citation validation
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3e-verification.md
+              - docs/zh-CN/p2-3e-verification.md
           - id: P2.3f
             name: Closure and compatibility hardening
-            status: planned
+            status: completed
+            verificationEvidence:
+              - docs/en/p2-3f-verification.md
+              - docs/zh-CN/p2-3f-verification.md
         planningEvidence:
           - docs/en/p2-3-implementation-plan.md
           - docs/zh-CN/p2-3-implementation-plan.md
+        verificationEvidence:
+          - docs/en/p2-3-acceptance-candidate.md
+          - docs/zh-CN/p2-3-acceptance-candidate.md
       - id: P2.4
         name: Product and operations gate
         status: planned
