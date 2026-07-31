@@ -1,5 +1,5 @@
 export const zhCN = {
-  brand: { subtitle: "AI 应用工程平台", home: "Apvero 首页" },
+  brand: { home: "Apvero 首页" },
   nav: {
     overview: "概览", build: "构建", operate: "运行", govern: "治理", organization: "组织", system: "系统",
     applications: "AI 应用", models: "模型", prompts: "提示词", knowledge: "知识库", capabilities: "工具与 MCP", evaluations: "评测", playground: "调试台",

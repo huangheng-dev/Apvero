@@ -57,7 +57,7 @@ export function App() {
   return <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
     {mobileOpen && <button className="mobile-scrim" aria-label={t("common.close")} onClick={() => setMobileOpen(false)} />}
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
-      <div className="sidebar-brand-row"><button className="brand" onClick={() => navigate("overview")} aria-label={t("brand.home")}><span className="brand-mark">A</span><span className="brand-copy"><strong>Apvero</strong><small>{t("brand.subtitle")}</small></span></button><button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label={t("shell.collapse")}>{collapsed ? "›" : "‹"}</button></div>
+      <div className="sidebar-brand-row"><button className="brand" onClick={() => navigate("overview")} aria-label={t("brand.home")}><span className="brand-mark">A</span><span className="brand-copy"><strong>Apvero</strong></span></button><button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label={t("shell.collapse")}>{collapsed ? "›" : "‹"}</button></div>
       <nav className="primary-nav" aria-label={t("shell.primaryNavigation")}>
         {matches("overview") && <NavButton item={overviewItem} active={page === "overview"} collapsed={collapsed} onClick={() => navigate("overview")} />}
         {groups.map((group) => {
