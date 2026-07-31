@@ -69,36 +69,34 @@ select { cursor: pointer; }
 .sidebar-brand-row { position: relative; flex: 0 0 68px; height: 68px; display: flex; align-items: center; gap: 8px; padding: 0 4px; }
 .brand { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 11px; padding: 5px; background: transparent; text-align: left; cursor: pointer; }
 .brand:hover { background: color-mix(in srgb, var(--panel) 62%, transparent); }
-.brand-mark { position: relative; flex: 0 0 auto; width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--line)); border-radius: 12px; color: #06120d; background: linear-gradient(145deg, #8cf0c4, var(--accent) 58%, #39be8a); font-weight: 900; font-size: 19px; box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 20%, transparent), inset 0 1px #ffffff75; }
-.brand-mark::after { content: ""; position: absolute; right: 5px; top: 5px; width: 4px; height: 4px; border-radius: 50%; background: #fff; opacity: .9; }
+.brand-mark { position: relative; flex: 0 0 auto; width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 50%; color: #07120e; background: linear-gradient(145deg, #8cf0c4, var(--accent)); box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 16%, transparent); }
+.brand-mark-icon { width: 22px; height: 22px; }
 .brand-copy { min-width: 0; }
 .brand-copy strong { display: block; white-space: nowrap; }
 .brand-copy strong { font-size: 18px; letter-spacing: .1px; }
 .collapse-button, .mobile-menu { display: grid; place-items: center; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
-.collapse-button { position: absolute; right: 4px; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 7px; color: var(--muted); opacity: 0; transform: translateX(4px); pointer-events: none; transition: opacity .16s ease, transform .16s ease, background .16s ease; }
-.sidebar-brand-row:hover .collapse-button, .sidebar-brand-row:focus-within .collapse-button { opacity: 1; transform: translateX(0); pointer-events: auto; }
+.collapse-button { position: absolute; right: 4px; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 7px; color: var(--muted); opacity: 1; transform: none; pointer-events: auto; transition: opacity .16s ease, transform .16s ease, background .16s ease; }
 .workspace-mark { flex: 0 0 auto; width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent-2) 35%, var(--line)); border-radius: 7px; color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 8%, var(--panel)); font: 700 9px monospace; }
 .search-control { position: relative; display: flex; align-items: center; }
 .search-control > span { position: absolute; left: 11px; z-index: 1; color: var(--subtle); }
-.primary-nav { min-height: 0; flex: 1; display: block; overflow-y: auto; margin-top: 16px; padding: 0 7px 20px 2px; scrollbar-width: none; -ms-overflow-style: none; }
+.primary-nav { min-height: 0; flex: 1; display: block; overflow-y: auto; margin-top: 10px; padding: 0 7px 12px 2px; scrollbar-width: none; -ms-overflow-style: none; }
 .primary-nav::-webkit-scrollbar { display: none; width: 0; height: 0; }
-.nav-group { margin-top: 5px; }
-.nav-group-title { position: sticky; top: 0; z-index: 1; width: 100%; display: flex; justify-content: space-between; border: 0; padding: 6px 9px 4px; color: var(--subtle); background: color-mix(in srgb, var(--sidebar) 94%, transparent); font-size: 10px; font-weight: 800; letter-spacing: 1.15px; text-transform: uppercase; cursor: pointer; }
+.nav-group { margin-top: 3px; }
+.nav-group-title { position: sticky; top: 0; z-index: 1; width: 100%; display: flex; justify-content: space-between; border: 0; padding: 5px 9px 3px; color: var(--subtle); background: color-mix(in srgb, var(--sidebar) 94%, transparent); font-size: 10px; font-weight: 800; letter-spacing: 1.15px; text-transform: uppercase; cursor: pointer; }
 .nav-group-title i { font-style: normal; }
-.nav-item { position: relative; width: 100%; min-height: 36px; display: flex; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 8px; padding: 5px 9px; color: var(--muted); background: transparent; text-align: left; cursor: pointer; }
+.nav-item { position: relative; width: 100%; min-height: 34px; display: flex; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 8px; padding: 4px 9px; color: var(--muted); background: transparent; text-align: left; cursor: pointer; }
 .nav-item:hover { color: var(--text); background: var(--panel); }
 .nav-item.active { color: var(--text); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, var(--panel)), var(--panel)); }
-.nav-item.active::before { content: ""; position: absolute; left: -3px; width: 2px; height: 19px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.nav-item.active::before { content: ""; position: absolute; left: 8px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .nav-glyph { flex: 0 0 auto; width: 20px; color: var(--subtle); font: 700 10px monospace; text-align: center; }
 .nav-item.active .nav-glyph { color: var(--accent); }
 .nav-label { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12.5px; font-weight: 650; }
 .nav-item small { padding: 2px 4px; border-radius: 4px; color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 12%, transparent); font: 700 9px monospace; }
-.live-pin { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.avatar { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 50%; color: #07120e; background: linear-gradient(145deg, #8cf0c4, var(--accent)); font: 800 9px monospace; box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 16%, transparent); }
-.avatar.large { width: 40px; height: 40px; font-size: 10px; }
-.nav-collapsed .brand-copy, .nav-collapsed .nav-group-title, .nav-collapsed .nav-label, .nav-collapsed .nav-item small, .nav-collapsed .live-pin { display: none; }
+.avatar { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font: 700 10px monospace; letter-spacing: .5px; }
+.avatar.large { width: 40px; height: 40px; font-size: 12px; }
+.nav-collapsed .brand-copy, .nav-collapsed .nav-group-title, .nav-collapsed .nav-label, .nav-collapsed .nav-item small { display: none; }
 .nav-collapsed .brand, .nav-collapsed .nav-item { justify-content: center; }
-.nav-collapsed .collapse-button { right: 50%; transform: translateX(50%); }
+.nav-collapsed .collapse-button { left: 50%; right: auto; transform: translateX(-50%); }
 .nav-collapsed .sidebar-brand-row:hover .brand, .nav-collapsed .sidebar-brand-row:focus-within .brand { opacity: 0; pointer-events: none; }
 
 .main-surface { min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
@@ -114,14 +112,15 @@ select { cursor: pointer; }
 .utility-button { min-width: 74px; height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 9px; padding: 0 12px; color: var(--muted); background: color-mix(in srgb, var(--panel) 86%, transparent); font-size: 11.5px; font-weight: 700; cursor: pointer; }
 .utility-button:hover, .language-button:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
 .language-button { min-width: 94px; color: var(--text); }
-.account-menu { position: relative; margin-left: 2px; }
-.account-menu > summary { min-width: 164px; min-height: 44px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 16px; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 11px; padding: 4px 7px; cursor: pointer; list-style: none; }
+.account-menu { position: relative; }
+.account-menu > summary { min-width: 164px; height: 38px; display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; background: color-mix(in srgb, var(--panel) 86%, transparent); cursor: pointer; list-style: none; transition: color .16s ease, border-color .16s ease, background .16s ease; }
 .account-menu > summary::-webkit-details-marker { display: none; }
-.account-menu > summary:hover, .account-menu[open] > summary { border-color: var(--line); background: var(--panel); }
+.account-menu > summary:hover,
+.account-menu[open] > summary { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); background: var(--panel); }
 .account-summary { min-width: 0; text-align: left; }
 .account-summary strong, .account-summary small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.account-summary strong { font-size: 11.5px; }
-.account-summary small { margin-top: 1px; color: var(--subtle); font-size: 9.5px; }
+.account-summary strong { font-size: 10.5px; }
+.account-summary small { margin-top: 1px; color: var(--subtle); font-size: 8.9px; }
 .account-menu[open] > summary > .app-icon { transform: rotate(180deg); }
 .account-popover { position: absolute; top: calc(100% + 10px); right: 0; width: 268px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--panel); box-shadow: var(--shadow); }
 .account-identity { display: flex; align-items: center; gap: 11px; padding-bottom: 13px; border-bottom: 1px solid var(--line-soft); }
@@ -409,7 +408,7 @@ pre { max-height: 280px; overflow: auto; margin: 0; border-radius: 8px; padding:
   .top-search input { padding-right: 10px; }
   .utility-button { min-width: 38px; width: 38px; padding: 0; }
   .utility-button > span { display: none; }
-  .account-menu > summary { min-width: 42px; grid-template-columns: 34px; padding: 3px; }
+  .account-menu > summary { min-width: 38px; grid-template-columns: 28px; justify-content: center; padding: 0; }
   .account-summary, .account-menu > summary > .app-icon { display: none; }
   .account-popover { right: -2px; width: min(268px, calc(100vw - 24px)); }
   .page-header h1 { font-size: 29px; }

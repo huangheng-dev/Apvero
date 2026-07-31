@@ -57,7 +57,7 @@ export function App() {
   return <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
     {mobileOpen && <button className="mobile-scrim" aria-label={t("common.close")} onClick={() => setMobileOpen(false)} />}
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
-      <div className="sidebar-brand-row"><button className="brand" onClick={() => navigate("overview")} aria-label={t("brand.home")}><span className="brand-mark">A</span><span className="brand-copy"><strong>Apvero</strong></span></button><button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label={t("shell.collapse")}>{collapsed ? "›" : "‹"}</button></div>
+      <div className="sidebar-brand-row"><button className="brand" onClick={() => navigate("overview")} aria-label={t("brand.home")}><span className="brand-mark"><BrandLogo /></span><span className="brand-copy"><strong>Apvero</strong></span></button><button className="collapse-button" onClick={() => setCollapsed(!collapsed)} aria-label={t("shell.collapse")}>{collapsed ? "›" : "‹"}</button></div>
       <nav className="primary-nav" aria-label={t("shell.primaryNavigation")}>
         {matches("overview") && <NavButton item={overviewItem} active={page === "overview"} collapsed={collapsed} onClick={() => navigate("overview")} />}
         {groups.map((group) => {
@@ -88,9 +88,20 @@ function AppIcon({ name }: { name: "search" | "moon" | "sun" | "language" | "che
   return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
+function BrandLogo() {
+  return <svg className="brand-mark-icon" viewBox="0 0 24 24" aria-hidden="true" role="img" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.4 19.6 12 4.4l7.6 15.2" />
+    <path d="M8.3 13.6h7.4" />
+  </svg>;
+}
+
 function NavButton({ item, active, collapsed, onClick }: { item: ReturnType<typeof findNavigationItem>; active: boolean; collapsed: boolean; onClick: () => void }) {
   const { t } = useTranslation();
-  return <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick} title={collapsed ? t(`nav.${item.id}`) : undefined}><span className="nav-glyph">{item.glyph}</span><span className="nav-label">{t(`nav.${item.id}`)}</span>{item.badge && <small>{t(`common.${item.badge}`)}</small>}{item.dataMode === "live" && <i className="live-pin" />}</button>;
+  return <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick} title={collapsed ? t(`nav.${item.id}`) : undefined}>
+    <span className="nav-glyph" aria-hidden="true">{item.glyph}</span>
+    <span className="nav-label">{t(`nav.${item.id}`)}</span>
+    {item.badge && <small>{t(`common.${item.badge}`)}</small>}
+  </button>;
 }
 
 function PageContent({ page, navigate }: { page: PageId; navigate: (page: PageId) => void }) {
